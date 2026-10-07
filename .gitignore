@@ -1,0 +1,17 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+# Secrets — never commit real keys
+env/*.json
+!env/example.json
+supabase/.temp/
+supabase/.branches/
+
+# Local Netlify folder
+.netlify

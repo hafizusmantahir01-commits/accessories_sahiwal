@@ -1,0 +1,17 @@
+{
+  "name": "Accessories Sahiwal",
+  "short_name": "Accessories",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#14286B",
+  "theme_color": "#14286B",
+  "description": "Private stock, purchase and sales management for Accessories Sahiwal.",
+  "orientation": "any",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/Icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/Icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/Icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/Icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

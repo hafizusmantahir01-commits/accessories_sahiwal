@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Accessories Sahiwal — private stock, purchase and sales management">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0B1F3F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Accessories Sahiwal">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Accessories Sahiwal</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+    }
+
+    /* 3D loading screen shown until Flutter draws its first frame. */
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      background: linear-gradient(135deg, #06142C 0%, #0B1F3F 50%, #3F5B8C 100%);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      perspective: 700px;
+      transition: opacity .3s ease;
+    }
+
+    #loading .cube {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, .55), 0 0 40px rgba(226, 199, 126, .25);
+      animation: swing 3.2s ease-in-out infinite;
+      transform-style: preserve-3d;
+    }
+
+    #loading .line {
+      width: 160px;
+      height: 3px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, transparent, #E2C77E, transparent);
+    }
+
+    #loading .name {
+      color: #E2C77E;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 4px;
+    }
+
+    @keyframes swing {
+
+      0%,
+      100% {
+        transform: rotateY(-28deg) rotateX(8deg);
+      }
+
+      50% {
+        transform: rotateY(28deg) rotateX(-8deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="loading" aria-label="Loading">
+    <img class="cube" src="icons/Icon-512.png" alt="Accessories Sahiwal">
+    <div class="line"></div>
+    <div class="name">LOADING…</div>
+  </div>
+  <script>
+           {{flutter_js}}
+       {{flutter_build_config}}
+    _flutter.loader.load({
+      onEntrypointLoaded: async function (engineInitializer) {
+        const appRunner = await engineInitializer.initializeEngine();
+        await appRunner.runApp();
+        const loading = document.getElementById('loading');
+        if (loading) { loading.style.opacity = '0'; setTimeout(() => loading.remove(), 350); }
+      }
+    });
+  </script>
+</body>
+
+</html>
