@@ -177,16 +177,19 @@ select test.assert((select array_agg(allocated_extra order by line_no) = array[3
                       from private.purchase_items where purchase_id = test.uuid('pur3')),
   'extra cost Rs. 100 split 33.34/33.33/33.33 (rounding remainder to first largest line)');
 select test.assert((select total = 1000 from private.purchases where id = test.uuid('pur3')), 'purchase total includes extra costs');
--- Quantity-based fallback when all line values are zero (free goods)
+-- Quantity-based allocation still applies when positive-price lines are fully discounted.
 select test.set('pur4', public.owner_save_purchase_draft(jsonb_build_object('supplier_id', test.get('sup'),
   'extra_costs', 10,
   'items', jsonb_build_array(
-     jsonb_build_object('product_id', test.get('buds'), 'quantity', 1, 'unit_price', 0),
-     jsonb_build_object('product_id', test.get('cable'), 'quantity', 3, 'unit_price', 0))))::text);
+     jsonb_build_object('product_id', test.get('buds'), 'quantity', 1, 'unit_price', 10, 'line_discount', 10),
+     jsonb_build_object('product_id', test.get('cable'), 'quantity', 3, 'unit_price', 10, 'line_discount', 30))))::text);
 select test.assert((select array_agg(allocated_extra order by line_no) = array[2.50, 7.50]::numeric[]
                       from private.purchase_items where purchase_id = test.uuid('pur4')),
-  'zero-value lines allocate extra cost by quantity');
+  'fully discounted lines allocate extra cost by quantity');
 select public.owner_delete_purchase_draft(test.uuid('pur4'));
+select test.expect_error(format($$select public.owner_save_purchase_draft(jsonb_build_object('supplier_id', %L,
+  'items', jsonb_build_array(jsonb_build_object('product_id', %L, 'quantity', 1, 'unit_price', 0))))$$,
+  test.get('sup'), test.get('buds')), 'greater than zero', 'zero purchase price rejected');
 select test.expect_error(format($$select public.owner_save_purchase_draft(jsonb_build_object('supplier_id', %L,
   'items', jsonb_build_array(jsonb_build_object('product_id', %L, 'quantity', 2, 'unit_price', 10, 'line_discount', 25))))$$,
   test.get('sup'), test.get('buds')), 'discount cannot exceed', 'over-discount rejected');
@@ -204,6 +207,8 @@ select test.assert((select unit_cost = 111.113333
                      where purchase_id = test.uuid('pur3')
                        and product_id = test.uuid('buds')),
   'batch unit cost adds allocated extra cost per unit at six-decimal precision');
+select test.expect_error(format($$select public.owner_delete_purchase_draft(%L)$$, test.get('pur3')),
+  'Only draft purchases can be deleted', 'posted purchase cannot be deleted');
 -- The allocated extra cost is added to each unit, not merely stored at line level.
 select test.set('pur5', public.owner_save_purchase_draft(jsonb_build_object(
   'supplier_id', test.get('sup'), 'extra_costs', 1000,

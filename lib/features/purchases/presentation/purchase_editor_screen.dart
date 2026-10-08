@@ -475,7 +475,14 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
                                 controller: e.price,
                                 keyboardType: money,
                                 decoration: const InputDecoration(labelText: 'Unit price'),
-                                validator: (v) => Validators.money(v),
+                                validator: (v) {
+                                  final error = Validators.money(v);
+                                  if (error != null) return error;
+                                  final amount = Money.tryParseInput(v ?? '');
+                                  return amount == null || amount <= Decimal.zero
+                                      ? 'Must be greater than 0'
+                                      : null;
+                                },
                                 onChanged: (_) => _changed(),
                               ),
                             ),

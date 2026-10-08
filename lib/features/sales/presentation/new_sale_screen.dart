@@ -198,6 +198,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     if (_type == SaleType.wholesale && _customerName.text.trim().isEmpty) return 'Enter the shopkeeper.';
     for (final l in _lines) {
       if (l.quantity <= 0) return '${l.name}: quantity must be at least 1.';
+      if (l.unitPrice <= Decimal.zero) return '${l.name}: unit price must be greater than 0.';
       if (l.overStock) return '${l.name}: only ${l.available} in stock.';
     }
     if (_finalAmount.text.trim().isNotEmpty) {
