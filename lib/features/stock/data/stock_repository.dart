@@ -1,8 +1,12 @@
+ import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/supabase/supabase_providers.dart';
+import '../../../core/utils/money.dart';
+import '../../private_area/data/private_guard.dart';
+import '../../purchases/domain/batch.dart';
 
 /// Quantities only — safe for partners. No cost fields exist in these results.
 class StockItem {
@@ -75,7 +79,8 @@ class StockMovement {
 }
 
 class StockRepository {
-  StockRepository(this._db);
+  StockRepository(this._ref, this._db);
+  final Ref _ref;
   final SupabaseClient _db;
 
   Future<List<StockItem>> list({String? search, String? categoryId, bool lowOnly = false}) async {
@@ -100,9 +105,39 @@ class StockRepository {
       throw AppException.from(e);
     }
   }
+
+  Future<List<FifoStockValue>> fifoValues(String search) => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_fifo_stock_values', params: {
+          'p_search': search.trim().isEmpty ? null : search.trim(),
+        });
+        return (rows as List)
+            .map((e) => FifoStockValue.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      });
+
+  Future<List<Batch>> batches(String productId) => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_product_batches', params: {'p_product_id': productId});
+        return (rows as List).map((e) => Batch.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      });
 }
 
-final stockRepositoryProvider = Provider<StockRepository>((ref) => StockRepository(ref.watch(supabaseProvider)));
+class FifoStockValue {
+  const FifoStockValue({required this.productId, required this.remainingQuantity, required this.stockValue});
+
+  final String productId;
+  final int remainingQuantity;
+  final Decimal stockValue;
+
+  factory FifoStockValue.fromJson(Map<String, dynamic> json) => FifoStockValue(
+        productId: json['product_id'] as String,
+        remainingQuantity: (json['remaining_quantity'] as num).toInt(),
+        stockValue: Money.parse(json['stock_value']),
+      );
+}
+
+final stockRepositoryProvider = Provider<StockRepository>(
+  (ref) => StockRepository(ref, ref.watch(supabaseProvider)),
+);
 
 class StockQuery {
   const StockQuery({this.search = '', this.categoryId, this.lowOnly = false});
@@ -124,4 +159,12 @@ final stockListProvider = FutureProvider.autoDispose.family<List<StockItem>, Sto
 
 final stockHistoryProvider = FutureProvider.autoDispose.family<List<StockMovement>, String>(
   (ref, productId) => ref.watch(stockRepositoryProvider).history(productId),
+);
+
+final fifoStockValuesProvider = FutureProvider.autoDispose.family<List<FifoStockValue>, String>(
+  (ref, search) => ref.watch(stockRepositoryProvider).fifoValues(search),
+);
+
+final productBatchesProvider = FutureProvider.autoDispose.family<List<Batch>, String>(
+  (ref, productId) => ref.watch(stockRepositoryProvider).batches(productId),
 );

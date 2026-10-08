@@ -38,6 +38,11 @@ select test.set('sale_a', (public.complete_sale(jsonb_build_object(
   'items', jsonb_build_array(jsonb_build_object('product_id', test.get('pa'), 'quantity', 30))), test.uuid('k_a')) ->> 'id'));
 select test.assert((select total = 10500 and discount_amount = 0 and invoice_no like 'INV-%' from public.sales where id = test.uuid('sale_a')),
   'Example A: sale total Rs. 10,500');
+select test.assert((select count(*) = 1 and sum(quantity) = 30 and min(cost_price) = 200
+                      from public.sale_items i
+                      join private.sale_item_costs c on c.sale_item_id = i.id
+                     where i.sale_id = test.uuid('sale_a')),
+  'sale item cost snapshot links every sold unit to its consumed batch');
 select test.assert((select (public.owner_sale_profit(test.uuid('sale_a')) ->> 'cost')::numeric = 6000
                        and (public.owner_sale_profit(test.uuid('sale_a')) ->> 'profit')::numeric = 4500),
   'Example A: COGS Rs. 6,000, gross profit Rs. 4,500');
@@ -51,17 +56,39 @@ select test.assert((public.complete_sale('{}'::jsonb, test.uuid('k_a')) ->> 'alr
 select test.assert((select saleable_qty = 70 from public.inventory_balances where product_id = test.uuid('pa')),
   'retry did not reduce stock again');
 
--- Example B: sell 4 retail @ 400 → revenue 1600, COGS 1000, profit 600, 16 left worth 4000
+-- Example B: sell 15 retail @ 400; FIFO consumes 10 @ 200 then 5 @ 300.
 select test.set('sale_b', (public.complete_sale(jsonb_build_object(
   'sale_type', 'retail', 'payment_method', 'jazzcash',
-  'items', jsonb_build_array(jsonb_build_object('product_id', test.get('pb'), 'quantity', 4))), gen_random_uuid()) ->> 'id'));
-select test.assert((select (public.owner_sale_profit(test.uuid('sale_b')) ->> 'net_sales')::numeric = 1600
-                       and (public.owner_sale_profit(test.uuid('sale_b')) ->> 'cost')::numeric = 1000
-                       and (public.owner_sale_profit(test.uuid('sale_b')) ->> 'profit')::numeric = 600),
-  'Example B: revenue 1600, COGS 1000, gross profit 600');
-select test.assert((select b.saleable_qty = 16 and v.carrying_value = 4000
+  'items', jsonb_build_array(jsonb_build_object('product_id', test.get('pb'), 'quantity', 15))), gen_random_uuid()) ->> 'id'));
+select test.assert((select (public.owner_sale_profit(test.uuid('sale_b')) ->> 'net_sales')::numeric = 6000
+                       and (public.owner_sale_profit(test.uuid('sale_b')) ->> 'cost')::numeric = 3500
+                       and (public.owner_sale_profit(test.uuid('sale_b')) ->> 'profit')::numeric = 2500),
+  'Example B: FIFO COGS is 10 @ 200 plus 5 @ 300');
+select test.assert((select b.saleable_qty = 5 and v.carrying_value = 1500
                       from public.inventory_balances b join private.inventory_valuation v using (product_id)
-                     where product_id = test.uuid('pb')), 'Example B: 16 left worth Rs. 4,000');
+                     where product_id = test.uuid('pb')), 'Example B: only 5 units remain in the newer batch');
+select test.assert((select array_agg(c.quantity order by b.posted_at, b.id) = array[10, 5]
+                       and array_agg(c.cost_price order by b.posted_at, b.id) = array[200, 300]::numeric[]
+                      from public.sale_items i
+                      join private.sale_item_costs c on c.sale_item_id = i.id
+                      join private.batches b on b.id = c.batch_id
+                     where i.sale_id = test.uuid('sale_b')),
+  'sale item cost rows preserve FIFO batch quantities and unit costs');
+select test.assert((select remaining_quantity = 5 and stock_value = 1500
+                      from public.owner_fifo_stock_values()
+                     where product_id = test.uuid('pb')),
+  'stock value is based on remaining FIFO batch quantities and costs');
+select test.assert((select count(*) = 1 and sum(remaining_quantity) = 5
+                      from public.owner_product_batches(test.uuid('pb'))),
+  'owner batch detail lists remaining batches for the product');
+select test.assert((public.owner_profit_summary((now() at time zone 'Asia/Karachi')::date,
+                                                 (now() at time zone 'Asia/Karachi')::date) ->> 'cogs')::numeric = 9500,
+  'profit summary uses per-batch snapshots for completed sales');
+select test.expect_error(format($$select public.complete_sale(jsonb_build_object('sale_type','retail','payment_method','cash',
+  'items', jsonb_build_array(jsonb_build_object('product_id', %L, 'quantity', 6))), gen_random_uuid())$$,
+  test.get('pb')), 'INSUFFICIENT_STOCK', 'sale exceeding remaining batch stock is blocked');
+select test.assert((select saleable_qty = 5 from public.inventory_balances where product_id = test.uuid('pb')),
+  'blocked sale does not change stock');
 select test.expect_error(format($$select public.complete_sale(jsonb_build_object('sale_type','retail','payment_method','jazzcash',
   'amount_tendered', 500, 'items', jsonb_build_array(jsonb_build_object('product_id', %L, 'quantity', 1))), gen_random_uuid())$$,
   test.get('pb')), 'exact amount', 'electronic payment must be the exact amount');
@@ -142,6 +169,7 @@ select test.expect_error(format($$select public.complete_sale(jsonb_build_object
   'permission', 'partner without permission cannot sell');
 select test.assert((select count(*) >= 3 from public.sales), 'partner can view sales list');
 select test.assert((select count(*) = 0 from private.sale_costs), 'partner cannot see sale costs');
+select test.assert((select count(*) = 0 from private.sale_item_costs), 'partner cannot see FIFO batch cost rows');
 select test.expect_error(format($$select public.owner_sale_profit(%L)$$, test.get('sale_a')), 'Owner access', 'partner cannot see profit');
 select test.expect_error($$select * from public.owner_activity_log()$$, 'Owner access', 'partner cannot see history');
 reset role;

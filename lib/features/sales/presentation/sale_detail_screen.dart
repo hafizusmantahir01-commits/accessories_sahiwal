@@ -247,7 +247,7 @@ class _SaleProfitCard extends ConsumerWidget {
           final margin = net.signum > 0 ? profit.toDouble() / net.toDouble() * 100 : 0.0;
           return Column(children: [
             InfoRow('Money received', Money.format(net)),
-            InfoRow('Cost (average)', Money.format(m['cost'])),
+            InfoRow('Cost (FIFO)', Money.format(m['cost'])),
             if (Money.parse(m['discount']).signum > 0) InfoRow('Discount given', Money.format(m['discount'])),
             InfoRow('Profit', Money.format(profit), bold: true),
             InfoRow('Margin', '${margin.toStringAsFixed(1)}%'),
