@@ -128,6 +128,8 @@ select test.set('pur1', public.owner_save_purchase_draft(jsonb_build_object(
   'items', jsonb_build_array(jsonb_build_object('product_id', test.get('charger'), 'quantity', 10, 'unit_price', 300))))::text);
 select test.assert((select saleable_qty = 10 from public.inventory_balances where product_id = test.uuid('charger')),
   'AC-08 draft purchase leaves stock unchanged');
+select test.assert((select count(*) = 0 from private.batches where purchase_id = test.uuid('pur1')),
+  'draft purchase creates no stock batches');
 select test.expect_error(format($$select public.owner_post_purchase(%L, 'cash', 2999, %L)$$, test.get('pur1'), gen_random_uuid()),
   'SHORTFALL', 'underpaid purchase cannot be posted');
 select test.expect_error(format($$select public.owner_post_purchase(%L, 'cash', 3500, %L)$$, test.get('pur1'), gen_random_uuid()),
@@ -137,6 +139,13 @@ select test.assert((public.owner_post_purchase(test.uuid('pur1'), 'bank_transfer
   'purchase posted with number PUR-000001');
 select test.assert((public.owner_post_purchase(test.uuid('pur1'), 'bank_transfer', 3000, test.uuid('k_pur1')) ->> 'already_posted')::boolean,
   'AC-08 retrying the post is a no-op');
+select test.assert((select count(*) = 1 and bool_and(quantity = 10 and remaining_quantity = 10 and unit_cost = 300)
+                      from private.batches where purchase_id = test.uuid('pur1')),
+  'purchase posting creates one available batch with the purchase unit cost');
+select test.assert((select b.posted_at = p.posted_at
+                      from private.batches b join private.purchases p on p.id = b.purchase_id
+                     where b.purchase_id = test.uuid('pur1')),
+  'batch and purchase share the actual posting timestamp');
 select test.assert((select b.saleable_qty = 20 and v.average_cost = 250 and v.carrying_value = 4000 + 1000
                       from public.inventory_balances b join private.inventory_valuation v using (product_id)
                      where product_id = test.uuid('charger')),
@@ -187,6 +196,22 @@ select test.expect_error(format($$select public.owner_save_purchase_draft(jsonb_
 
 -- Post pur3 and check that the earlier purchase lines keep their original costs (AC-12 for purchases)
 select public.owner_post_purchase(test.uuid('pur3'), 'cash', 1000, gen_random_uuid());
+select test.assert((select count(*) = 3 and sum(quantity) = 9
+                      from private.batches where purchase_id = test.uuid('pur3')),
+  'purchase posting creates exactly one batch for every purchase line');
+select test.assert((select unit_cost = 111.113333
+                      from private.batches
+                     where purchase_id = test.uuid('pur3')
+                       and product_id = test.uuid('buds')),
+  'batch unit cost adds allocated extra cost per unit at six-decimal precision');
+-- The allocated extra cost is added to each unit, not merely stored at line level.
+select test.set('pur5', public.owner_save_purchase_draft(jsonb_build_object(
+  'supplier_id', test.get('sup'), 'extra_costs', 1000,
+  'items', jsonb_build_array(jsonb_build_object('product_id', test.get('cable'), 'quantity', 100, 'unit_price', 200))))::text);
+select public.owner_post_purchase(test.uuid('pur5'), 'cash', 21000, gen_random_uuid());
+select test.assert((select unit_cost = 210 and quantity = 100 and remaining_quantity = 100
+                      from private.batches where purchase_id = test.uuid('pur5')),
+  '100 units and Rs. 1,000 extra cost increases batch unit cost by Rs. 10');
 select test.assert((select landed_unit_cost = 300 from private.purchase_items where purchase_id = test.uuid('pur1')),
   'original purchase batch cost history preserved');
 select test.assert((select bool_and(ok) from public.owner_reconcile_inventory()), 'balances reconcile with the movement ledger');
@@ -203,6 +228,7 @@ select test.assert((select saleable_qty = 23 from public.lookup_product('CHG-20W
 select test.assert((select count(*) > 0 from public.stock_movement_history(test.uuid('charger'))), 'partner sees safe movement history');
 select test.assert((select count(*) = 0 from private.inventory_valuation), 'partner gets NO rows from valuation table');
 select test.assert((select count(*) = 0 from private.stock_movements), 'partner gets NO rows from cost ledger');
+select test.assert((select count(*) = 0 from private.batches), 'partner gets NO purchase batch costs');
 select test.assert((select count(*) = 0 from private.purchases), 'partner gets NO purchases');
 select test.assert((select count(*) = 0 from private.suppliers), 'partner gets NO suppliers');
 select test.assert((select count(*) = 0 from private.payments), 'partner gets NO payments');
