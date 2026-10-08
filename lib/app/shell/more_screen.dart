@@ -42,7 +42,7 @@ class MoreScreen extends ConsumerWidget {
               title: const Text('Settings'),
               subtitle: const Text('Branding, receipt details'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.go('/settings'),
+              onTap: () => context.push('/settings'),
             ),
           ],
           ListTile(
