@@ -12,6 +12,7 @@ import '../../auth/data/auth_repository.dart';
 import '../data/products_repository.dart';
 import '../domain/product.dart';
 import 'widgets/product_thumb.dart';
+import '../../private_area/data/private_area_controller.dart';
 
 class ProductsScreen extends ConsumerStatefulWidget {
   const ProductsScreen({super.key, this.initialQuery});
@@ -174,12 +175,13 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   }
 }
 
-class ProductTile extends StatelessWidget {
+class ProductTile extends ConsumerWidget {
   const ProductTile({super.key, required this.product});
   final Product product;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showStock = ref.watch(stockVisibleProvider);
     final theme = Theme.of(context);
     final p = product;
     final stockColor = p.saleableQty == 0
@@ -227,7 +229,7 @@ class ProductTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Column(
+              if (showStock) Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text('${p.saleableQty}',

@@ -155,7 +155,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'purchases',
                 builder: (_, _) => const PurchasesScreen(),
                 routes: [
-                  GoRoute(path: 'new', builder: (_, _) => const PurchaseEditorScreen()),
+                  GoRoute(
+                    path: 'new',
+                    builder: (_, s) => PurchaseEditorScreen(productId: s.uri.queryParameters['product']),
+                  ),
                   GoRoute(
                     path: ':id',
                     builder: (_, s) => PurchaseDetailScreen(purchaseId: s.pathParameters['id']!),

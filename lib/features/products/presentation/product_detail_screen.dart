@@ -8,12 +8,14 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/correction_dialogs.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../private_area/data/private_area_controller.dart';
 import '../../stock/presentation/stock_history_sheet.dart';
 import '../data/products_repository.dart';
 import '../domain/product.dart';
 import 'widgets/product_thumb.dart';
+import '../../private_area/presentation/stock_locked.dart';
 
 class ProductDetailScreen extends ConsumerWidget {
   const ProductDetailScreen({super.key, required this.productId});
@@ -96,49 +98,73 @@ class _ArchiveMenu extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete product?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('"${product.name}" (${product.code}) and its photos will be deleted permanently. '
-                'This is saved in the activity history.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reason,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Reason *', hintText: 'e.g. added by mistake'),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Products that already have stock, purchases or sales cannot be deleted — archive them instead.',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-            onPressed: () {
-              if (reason.text.trim().isEmpty) return;
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final repo = ref.read(productsRepositoryProvider);
+    Map<String, dynamic> preview;
     try {
-      await ref.read(productsRepositoryProvider).deleteProduct(product.id, reason.text);
+      preview = await repo.deletePreview(product.id);
+    } catch (e) {
+      if (context.mounted) context.showError(e);
+      return;
+    }
+    if (!context.mounted) return;
+
+    // Sold products stay (old bills must stay correct) - offer Archive instead.
+    if (((preview['sold_lines'] as num?) ?? 0) > 0) {
+      final archive = await confirmDialog(
+        context,
+        title: 'Cannot delete',
+        message: '"${product.name}" has already been sold, so it cannot be deleted (old bills must stay correct).\n\n'
+            'Archive it instead: it will be hidden from lists and new sales.',
+        confirmLabel: product.isActive ? 'Archive' : 'OK',
+      );
+      if (archive && product.isActive && context.mounted) {
+        try {
+          await ref.read(productsRepositoryProvider).setActive(product.id, false);
+          ref.invalidate(productProvider(product.id));
+          ref.invalidate(productListProvider);
+          if (context.mounted) context.showSuccess('Product archived.');
+        } catch (e) {
+          if (context.mounted) context.showError(e);
+        }
+      }
+      return;
+    }
+
+    final stock = (preview['stock'] as num?)?.toInt() ?? 0;
+    final purchases = (preview['purchases'] as List? ?? const []).map((e) => Map<String, dynamic>.from(e as Map));
+    final openingQty = (preview['opening_qty'] as num?)?.toInt() ?? 0;
+    final hasEntries = stock > 0 || purchases.isNotEmpty || openingQty > 0;
+    if (hasEntries && !ref.read(stockVisibleProvider)) {
+      final go = await confirmDialog(
+        context,
+        title: 'Unlock first',
+        message: 'This product has stock or purchases. Open the Private Area first, then delete it.',
+        confirmLabel: 'Unlock',
+      );
+      if (go && context.mounted) context.go('/private/unlock?from=/products/${product.id}');
+      return;
+    }
+    final removes = <String>[
+      'Product "${product.name}" (${product.code}) and its photos',
+      if (stock > 0) 'Its stock: $stock pcs',
+      for (final p in purchases)
+        '${p['purchase_no']}: ${p['quantity']} pcs of this product'
+        '${((p['other_lines'] as num?) ?? 0) > 0 ? ' (other products in this purchase stay)' : ' (whole purchase, it has nothing else)'}',
+      if (openingQty > 0) 'Opening stock entries: $openingQty pcs',
+    ];
+    final reason = await confirmDeleteWithReason(
+      context,
+      title: 'Delete product?',
+      message: 'Only this product and its own entries are deleted. Nothing else changes.',
+      willRemove: removes,
+      hint: 'e.g. duplicate of another product',
+    );
+    if (reason == null) return;
+    try {
+      await repo.deleteProduct(product.id, reason);
       ref.invalidate(productListProvider);
       if (!context.mounted) return;
-      context.showSuccess('Product deleted.');
+      context.showSuccess('Product deleted. Saved in History.');
       if (context.canPop()) {
         context.pop();
       } else {
@@ -190,6 +216,9 @@ class _InfoSection extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 16),
+        if (!ref.watch(stockVisibleProvider))
+          StockLockedCard(returnTo: '/products/${p.id}')
+        else
         SectionCard(
           title: 'Stock',
           trailing: TextButton.icon(
@@ -216,6 +245,14 @@ class _InfoSection extends ConsumerWidget {
             ],
           ),
         ),
+        if (isOwner && ref.watch(stockVisibleProvider)) ...[
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: () => context.push('/private/purchases/new?product=${p.id}'),
+            icon: const Icon(Icons.add_shopping_cart),
+            label: const Text('Add new stock (new purchase)'),
+          ),
+        ],
         const SizedBox(height: 12),
         SectionCard(
           title: 'Selling prices',

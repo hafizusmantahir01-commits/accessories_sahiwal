@@ -12,7 +12,9 @@ import '../../private_area/data/private_area_controller.dart';
 import '../data/sales_repository.dart';
 import '../domain/sale.dart';
 
-/// Sales history: period tabs, totals, list. Profit only for the unlocked owner.
+/// Sales history for any period: today, 7/30 days, this month/year, any past
+/// year, all time (since the app started) or custom dates.
+/// Profit only for the unlocked owner.
 class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
 
@@ -21,13 +23,79 @@ class SalesScreen extends ConsumerStatefulWidget {
 }
 
 class _SalesScreenState extends ConsumerState<SalesScreen> {
-  SalesPeriod _period = SalesPeriod.today;
+  SalesPeriod? _period = SalesPeriod.today; // null = a picked year or custom dates
+  SalesWindow _window = SalesPeriod.today.window;
   SaleType? _type; // null = both
 
   void _refresh() {
-    ref.invalidate(salesListProvider(_period));
-    ref.invalidate(salesSummaryProvider(_period));
-    ref.invalidate(ownerProfitProvider(_period));
+    ref.invalidate(salesListProvider(_window));
+    ref.invalidate(salesSummaryProvider(_window));
+    ref.invalidate(ownerProfitProvider(_window));
+    ref.invalidate(profitByMonthProvider(_window));
+    ref.invalidate(profitByProductProvider(_window));
+    ref.invalidate(firstSaleDateProvider);
+  }
+
+  void _setPeriod(SalesPeriod p) => setState(() {
+        _period = p;
+        _window = p.window;
+      });
+
+  Future<void> _pickYear() async {
+    final firstAsync = ref.read(firstSaleDateProvider);
+    final first = firstAsync.hasValue ? firstAsync.requireValue : null;
+    final now = BizTime.today().year;
+    final firstYear = first?.year ?? now;
+    final years = [for (var y = now; y >= firstYear; y--) y];
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('Choose a year', style: TextStyle(fontWeight: FontWeight.w700))),
+            for (final y in years)
+              ListTile(
+                leading: const Icon(Icons.calendar_month_outlined),
+                title: Text('$y'),
+                trailing: _period == null && _window == yearWindow(y) ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(ctx, y),
+              ),
+            if (first == null)
+              const ListTile(subtitle: Text('Years appear here once sales are recorded.')),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _period = null;
+        _window = yearWindow(picked);
+      });
+    }
+  }
+
+  Future<void> _pickDates() async {
+    final today = BizTime.today();
+    final firstAsync = ref.read(firstSaleDateProvider);
+    final first = firstAsync.hasValue ? firstAsync.requireValue : null;
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: today,
+      initialDateRange: DateTimeRange(
+        start: _window.from.isBefore(DateTime(2001)) ? (first ?? today) : _window.from,
+        end: _window.to,
+      ),
+      helpText: 'Choose dates',
+    );
+    if (r != null && mounted) {
+      setState(() {
+        _period = null;
+        _window = SalesWindow(r.start, r.end, '${BizTime.date(r.start)} – ${BizTime.date(r.end)}');
+      });
+    }
   }
 
   @override
@@ -36,9 +104,13 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final isOwner = profile?.isOwner ?? false;
     final canSell = isOwner || (profile?.canCreateSale ?? false);
     final unlocked = ref.watch(privateAreaProvider.select((s) => s.unlocked));
-    final list = ref.watch(salesListProvider(_period));
-    final summary = ref.watch(salesSummaryProvider(_period));
+    final list = ref.watch(salesListProvider(_window));
+    final summary = ref.watch(salesSummaryProvider(_window));
+    ref.watch(firstSaleDateProvider); // keeps the year list ready
     final theme = Theme.of(context);
+    final w = _window;
+    final pickedYear = _period == null && w.from.month == 1 && w.from.day == 1 && w.label.startsWith('Year ');
+    final custom = _period == null && !pickedYear;
 
     return Scaffold(
       appBar: AppBar(
@@ -61,10 +133,25 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SegmentedButton<SalesPeriod>(
-                    segments: [for (final p in SalesPeriod.values) ButtonSegment(value: p, label: Text(p.label))],
-                    selected: {_period},
-                    onSelectionChanged: (s) => setState(() => _period = s.first),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final p in SalesPeriod.values)
+                        ChoiceChip(label: Text(p.label), selected: _period == p, onSelected: (_) => _setPeriod(p)),
+                      ChoiceChip(
+                        avatar: const Icon(Icons.calendar_month_outlined, size: 18),
+                        label: Text(pickedYear ? w.label.replaceFirst('Year ', '') : 'Year…'),
+                        selected: pickedYear,
+                        onSelected: (_) => _pickYear(),
+                      ),
+                      ChoiceChip(
+                        avatar: const Icon(Icons.date_range_outlined, size: 18),
+                        label: const Text('Dates…'),
+                        selected: custom,
+                        onSelected: (_) => _pickDates(),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   summary.when(
@@ -73,11 +160,18 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     data: (s) => Card3D(
                       maxAngle: 0.05,
                       padding: const EdgeInsets.all(18),
-                      colors: const [Color(0xFF0B1A4A), Color(0xFF14286B), Color(0xFF2563EB)],
+                      colors: AppTheme.heroColors,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Net sales · ${_period.label}', style: const TextStyle(color: Colors.white70)),
+                          Text('Net sales · ${w.label}', style: const TextStyle(color: Colors.white70)),
+                          if (_period != SalesPeriod.today)
+                            Text(
+                              _period == SalesPeriod.all
+                                  ? 'Up to ${BizTime.date(w.to)}'
+                                  : '${BizTime.date(w.from)} – ${BizTime.date(w.to)}',
+                              style: const TextStyle(color: Colors.white60, fontSize: 12),
+                            ),
                           const SizedBox(height: 4),
                           Text(Money.format(s.netSales),
                               style: theme.textTheme.headlineMedium
@@ -85,6 +179,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                           const SizedBox(height: 10),
                           Wrap(spacing: 18, runSpacing: 6, children: [
                             _WhiteStat('Bills', '${s.count}'),
+                            _WhiteStat('Pieces sold', '${s.pieces}'),
                             _WhiteStat('Wholesale', Money.format(s.wholesale)),
                             _WhiteStat('Retail', Money.format(s.retail)),
                             if (s.discounts.signum > 0) _WhiteStat('Discounts given', Money.format(s.discounts)),
@@ -95,9 +190,15 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   ),
                   if (isOwner) ...[
                     const SizedBox(height: 12),
-                    if (unlocked)
-                      _ProfitCard(period: _period)
-                    else
+                    if (unlocked) ...[
+                      _ProfitCard(window: w),
+                      if (w.days > 31) ...[
+                        const SizedBox(height: 12),
+                        _MonthsCard(window: w),
+                      ],
+                      const SizedBox(height: 12),
+                      _ProductsCard(window: w),
+                    ] else
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.lock_outline),
@@ -123,7 +224,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         return const EmptyState(icon: Icons.receipt_long_outlined, title: 'No sales in this period');
                       }
                       return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (all.length >= 500)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text('Showing the latest 500 bills. Totals above include every bill.',
+                                  style: theme.textTheme.bodySmall),
+                            ),
                           for (final s in sales) ...[
                             _SaleTile(sale: s),
                             const SizedBox(height: 8),
@@ -159,14 +267,14 @@ class _WhiteStat extends StatelessWidget {
 }
 
 class _ProfitCard extends ConsumerWidget {
-  const _ProfitCard({required this.period});
-  final SalesPeriod period;
+  const _ProfitCard({required this.window});
+  final SalesWindow window;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profit = ref.watch(ownerProfitProvider(period));
+    final profit = ref.watch(ownerProfitProvider(window));
     return SectionCard(
-      title: 'Profit (owner only)',
+      title: 'Profit · ${window.label}',
       child: profit.when(
         loading: () => const LinearProgressIndicator(),
         error: (e, _) => ErrorView(error: e),
@@ -181,6 +289,113 @@ class _ProfitCard extends ConsumerWidget {
             InfoRow('Gross profit', Money.format(gp), bold: true),
             InfoRow('Margin', '${margin.toStringAsFixed(1)}%'),
           ]);
+        },
+      ),
+    );
+  }
+}
+
+/// Month by month (shown for periods longer than a month).
+class _MonthsCard extends ConsumerWidget {
+  const _MonthsCard({required this.window});
+  final SalesWindow window;
+
+  static const _names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final months = ref.watch(profitByMonthProvider(window));
+    final theme = Theme.of(context);
+    return SectionCard(
+      title: 'Month by month',
+      child: months.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (e, _) => ErrorView(error: e),
+        data: (list) {
+          if (list.isEmpty) return const Text('No sales in this period.');
+          return Column(
+            children: [
+              for (final m in list)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text('${_names[m.month.month - 1]} ${m.month.year}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${m.bills} bills · ${m.pieces} pcs · sales ${Money.format(m.netSales)}'),
+                  trailing: Text(
+                    Money.format(m.profit),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: m.profit.signum < 0 ? AppTheme.danger : Colors.green.shade700,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Which products sold and how much profit each made.
+class _ProductsCard extends ConsumerStatefulWidget {
+  const _ProductsCard({required this.window});
+  final SalesWindow window;
+
+  @override
+  ConsumerState<_ProductsCard> createState() => _ProductsCardState();
+}
+
+class _ProductsCardState extends ConsumerState<_ProductsCard> {
+  bool _all = false;
+  bool _byPieces = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final products = ref.watch(profitByProductProvider(widget.window));
+    final theme = Theme.of(context);
+    return SectionCard(
+      title: 'Products sold',
+      trailing: products.hasValue && products.requireValue.length > 1
+          ? TextButton(
+              onPressed: () => setState(() => _byPieces = !_byPieces),
+              child: Text(_byPieces ? 'Sort: pieces' : 'Sort: profit'),
+            )
+          : null,
+      child: products.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (e, _) => ErrorView(error: e),
+        data: (raw) {
+          if (raw.isEmpty) return const Text('No products sold in this period.');
+          final list = [...raw];
+          if (_byPieces) list.sort((a, b) => b.pieces.compareTo(a.pieces));
+          final shown = _all ? list : list.take(10).toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final p in shown)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text('${p.name} · ${p.code}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${p.pieces} pcs · sales ${Money.format(p.netSales)} · cost ${Money.format(p.cogs)}'),
+                  trailing: Text(
+                    Money.format(p.profit),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: p.profit.signum < 0 ? AppTheme.danger : Colors.green.shade700,
+                    ),
+                  ),
+                  onTap: () => context.push('/products/${p.productId}'),
+                ),
+              if (list.length > 10)
+                TextButton(
+                  onPressed: () => setState(() => _all = !_all),
+                  child: Text(_all ? 'Show top 10' : 'Show all ${list.length} products'),
+                ),
+            ],
+          );
         },
       ),
     );

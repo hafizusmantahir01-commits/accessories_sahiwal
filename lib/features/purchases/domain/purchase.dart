@@ -60,6 +60,7 @@ class PurchaseSummary {
 
 class PurchaseLine {
   const PurchaseLine({
+    this.id = '',
     required this.lineNo,
     required this.productId,
     required this.productCode,
@@ -73,6 +74,8 @@ class PurchaseLine {
     required this.landedUnitCost,
   });
 
+  /// Database id of the line ('' for lines not saved yet).
+  final String id;
   final int lineNo;
   final String productId;
   final String productCode;
@@ -86,6 +89,7 @@ class PurchaseLine {
   final Decimal landedUnitCost;
 
   factory PurchaseLine.fromJson(Map<String, dynamic> j) => PurchaseLine(
+        id: (j['id'] as String?) ?? '',
         lineNo: (j['line_no'] as num).toInt(),
         productId: j['product_id'] as String,
         productCode: j['product_code'] as String,

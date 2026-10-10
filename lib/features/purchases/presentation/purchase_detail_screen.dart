@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/correction_dialogs.dart';
+import '../../products/data/products_repository.dart';
+import '../../stock/data/stock_repository.dart';
+import '../../valuation/data/valuation_repository.dart';
 import '../data/purchases_repository.dart';
 import '../domain/purchase.dart';
 import 'post_purchase_dialog.dart';
@@ -64,8 +68,16 @@ class PurchaseDetailScreen extends ConsumerWidget {
                               'Landed unit cost ${Money.format(l.landedUnitCost)}',
                             ),
                             isThreeLine: true,
-                            trailing: Text(Money.format(l.landedValue),
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
+                            trailing: p.isDraft
+                                ? Text(Money.format(l.landedValue), style: const TextStyle(fontWeight: FontWeight.w600))
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(Money.format(l.landedValue),
+                                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      _LineMenu(purchase: p, line: l),
+                                    ],
+                                  ),
                           ),
                           const Divider(height: 1),
                         ],
@@ -126,9 +138,19 @@ class PurchaseDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ] else ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+                        onPressed: () => _deletePurchase(context, ref, p),
+                        icon: const Icon(Icons.delete_forever_outlined),
+                        label: const Text('Delete this purchase'),
+                      ),
+                    ),
                     Text(
-                      'Posted purchases are permanent records. Supplier returns are handled under Returns & Adjustments (Stage 4).',
+                      'Wrong quantity or price? Use the ⋮ menu on a product line. '
+                      'Units that are already sold cannot be removed.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -139,6 +161,126 @@ class PurchaseDetailScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+void _refreshAfterCorrection(WidgetRef ref, String purchaseId) {
+  ref
+    ..invalidate(purchaseProvider(purchaseId))
+    ..invalidate(purchaseStockProvider(purchaseId))
+    ..invalidate(purchaseListProvider)
+    ..invalidate(purchaseRemainingProvider)
+    ..invalidate(stockListProvider)
+    ..invalidate(productListProvider)
+    ..invalidate(productProvider)
+    ..invalidate(valuationProvider);
+}
+
+Future<void> _deletePurchase(BuildContext context, WidgetRef ref, Purchase p) async {
+  final reason = await confirmDeleteWithReason(
+    context,
+    title: 'Delete ${p.purchaseNo ?? 'purchase'}?',
+    message: 'The whole purchase is removed: its stock goes out and its payment of ${Money.format(p.total)} is removed. '
+        'Not possible if any of it is already sold.',
+    willRemove: [for (final l in p.lines) '${l.quantity} × ${l.productName} (${l.productCode})'],
+    hint: 'e.g. entered twice',
+  );
+  if (reason == null) return;
+  try {
+    await ref.read(purchasesRepositoryProvider).deletePurchase(p.id, reason);
+    _refreshAfterCorrection(ref, p.id);
+    if (!context.mounted) return;
+    context.showSuccess('Purchase deleted. Saved in History.');
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/private/purchases');
+    }
+  } catch (e) {
+    if (context.mounted) context.showError(e);
+  }
+}
+
+/// ⋮ menu on a posted purchase line: correct quantity/price, or remove the line.
+class _LineMenu extends ConsumerWidget {
+  const _LineMenu({required this.purchase, required this.line});
+  final Purchase purchase;
+  final PurchaseLine line;
+
+  int _sold(WidgetRef ref) {
+    final stock = ref.read(purchaseStockProvider(purchase.id));
+    if (!stock.hasValue) return 0;
+    for (final s in stock.requireValue) {
+      if (s.itemId == line.id) return s.qtySold;
+    }
+    return 0;
+  }
+
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final sold = _sold(ref);
+    final r = await editQtyPriceDialog(
+      context,
+      title: 'Correct ${line.productName}',
+      quantity: line.quantity,
+      price: line.unitPrice,
+      priceLabel: 'Unit price (supplier rate)',
+      minQuantity: sold < 1 ? 1 : sold,
+      note: line.allocatedExtra.signum > 0 ? 'Extra cost on this line (${Money.format(line.allocatedExtra)}) stays the same.' : null,
+    );
+    if (r == null) return;
+    try {
+      await ref
+          .read(purchasesRepositoryProvider)
+          .editLine(itemId: line.id, quantity: r.quantity, unitPrice: r.price, reason: r.reason);
+      _refreshAfterCorrection(ref, purchase.id);
+      if (context.mounted) context.showSuccess('Corrected. Stock and total updated.');
+    } catch (e) {
+      if (context.mounted) context.showError(e);
+    }
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final last = purchase.lines.length == 1;
+    final reason = await confirmDeleteWithReason(
+      context,
+      title: 'Remove ${line.productName}?',
+      message: last
+          ? 'This is the only product in ${purchase.purchaseNo}, so the whole purchase will be deleted.'
+          : 'Only this line is removed from ${purchase.purchaseNo}. Other products stay.',
+      willRemove: ['${line.quantity} × ${line.productName} (${Money.format(line.landedValue)}) and its stock'],
+    );
+    if (reason == null) return;
+    try {
+      await ref.read(purchasesRepositoryProvider).deleteLine(line.id, reason);
+      _refreshAfterCorrection(ref, purchase.id);
+      if (!context.mounted) return;
+      context.showSuccess('Removed. Saved in History.');
+      if (last) {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/private/purchases');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) context.showError(e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (line.id.isEmpty) return const SizedBox.shrink();
+    return PopupMenuButton<String>(
+      tooltip: 'Correct',
+      onSelected: (v) => v == 'edit' ? _edit(context, ref) : _delete(context, ref),
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'edit', child: Text('Edit quantity / price')),
+        PopupMenuItem(
+          value: 'delete',
+          child: Text('Remove from purchase', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ),
+      ],
     );
   }
 }

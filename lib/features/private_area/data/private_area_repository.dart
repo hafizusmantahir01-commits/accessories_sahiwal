@@ -33,6 +33,19 @@ class PrivateAreaRepository {
         return (res as Map)['unlocked'] == true;
       });
 
+  /// Full-access partner: sign in again with the login password, then unlock.
+  Future<bool> unlockWithLogin(String password) => _call(() async {
+        final email = _db.auth.currentUser?.email;
+        if (email == null) return false;
+        try {
+          await _db.auth.signInWithPassword(email: email, password: password);
+        } on AuthException {
+          return false;
+        }
+        final res = await _db.rpc('unlock_with_login');
+        return (res as Map)['unlocked'] == true;
+      });
+
   Future<bool> touch() => _call(() async {
         final res = await _db.rpc('touch_private');
         return (res as Map)['unlocked'] == true;

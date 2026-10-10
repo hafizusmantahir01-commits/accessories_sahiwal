@@ -8,6 +8,7 @@ import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/correction_dialogs.dart';
 import '../../products/data/products_repository.dart';
 import '../../products/domain/product.dart';
 import '../../products/presentation/widgets/product_picker.dart';
@@ -58,7 +59,7 @@ class _OpeningStockScreenState extends ConsumerState<OpeningStockScreen> {
       title: 'Post opening stock?',
       message: 'Add $qty × ${_product!.name} at ${Money.format(cost)} each '
           '(${Money.format(cost * Decimal.fromInt(qty))} total).\n\n'
-          'Corrections later must be made with stock adjustments.',
+          'A mistake can be corrected later from the ⋮ menu in the list below.',
       confirmLabel: 'Post',
     );
     if (!ok) return;
@@ -87,6 +88,52 @@ class _OpeningStockScreenState extends ConsumerState<OpeningStockScreen> {
       });
     } catch (e) {
       if (mounted) context.showError(e);
+    }
+  }
+
+  void _refreshAll() {
+    ref
+      ..invalidate(openingEntriesProvider)
+      ..invalidate(stockListProvider)
+      ..invalidate(productListProvider)
+      ..invalidate(productProvider)
+      ..invalidate(valuationProvider);
+  }
+
+  Future<void> _editEntry(OpeningEntry e) async {
+    final r = await editQtyPriceDialog(
+      context,
+      title: 'Correct ${e.productLabel}',
+      quantity: e.quantity,
+      price: e.unitCost,
+      priceLabel: 'Actual unit cost',
+    );
+    if (r == null) return;
+    try {
+      await ref
+          .read(openingStockRepositoryProvider)
+          .edit(id: e.id, quantity: r.quantity, unitCost: r.price, reason: r.reason);
+      _refreshAll();
+      if (mounted) context.showSuccess('Corrected. Stock updated.');
+    } catch (err) {
+      if (mounted) context.showError(err);
+    }
+  }
+
+  Future<void> _deleteEntry(OpeningEntry e) async {
+    final reason = await confirmDeleteWithReason(
+      context,
+      title: 'Delete opening entry?',
+      message: 'Only this entry is removed. Not possible for units that are already sold.',
+      willRemove: ['${e.quantity} × ${e.productLabel} (${Money.format(e.totalValue)})'],
+    );
+    if (reason == null) return;
+    try {
+      await ref.read(openingStockRepositoryProvider).delete(e.id, reason);
+      _refreshAll();
+      if (mounted) context.showSuccess('Entry deleted. Saved in History.');
+    } catch (err) {
+      if (mounted) context.showError(err);
     }
   }
 
@@ -171,8 +218,8 @@ class _OpeningStockScreenState extends ConsumerState<OpeningStockScreen> {
                                 child: TextFormField(
                                   controller: _cost,
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  decoration: const InputDecoration(labelText: 'Actual unit cost', prefixText: 'Rs. '),
-                                  validator: (v) => Validators.money(v),
+                                  decoration: const InputDecoration(labelText: 'Actual unit cost *', prefixText: 'Rs. '),
+                                  validator: (v) => Validators.price(v, 'Unit cost'),
                                 ),
                               ),
                             ],
@@ -207,7 +254,24 @@ class _OpeningStockScreenState extends ConsumerState<OpeningStockScreen> {
                               title: Text(e.productLabel),
                               subtitle: Text('${e.quantity} × ${Money.format(e.unitCost)} · ${BizTime.dateTime(e.createdAt)}'
                                   '${e.note.isNotEmpty ? '\n${e.note}' : ''}'),
-                              trailing: Text(Money.format(e.totalValue)),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(Money.format(e.totalValue)),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Correct',
+                                    onSelected: (v) => v == 'edit' ? _editEntry(e) : _deleteEntry(e),
+                                    itemBuilder: (_) => [
+                                      const PopupMenuItem(value: 'edit', child: Text('Edit quantity / cost')),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Delete entry',
+                                            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           const Divider(),
                           InfoRow('Total opening value', Money.format(total), bold: true),

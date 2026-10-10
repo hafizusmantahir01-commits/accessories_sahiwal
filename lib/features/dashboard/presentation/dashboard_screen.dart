@@ -12,6 +12,7 @@ import '../../private_area/data/private_area_controller.dart';
 import '../../sales/data/sales_repository.dart';
 import '../../stock/data/stock_repository.dart';
 import '../../valuation/data/valuation_repository.dart';
+import '../../private_area/presentation/stock_locked.dart';
 
 /// Role-specific summary. Partners see quantities only; the owner sees stock
 /// value only while the private area is unlocked (fetched from the server then).
@@ -35,10 +36,10 @@ class DashboardScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref.invalidate(stockListProvider);
-              ref.invalidate(salesSummaryProvider(SalesPeriod.today));
+              ref.invalidate(salesSummaryProvider(SalesPeriod.today.window));
               if (unlocked) {
                 ref.invalidate(valuationProvider);
-                ref.invalidate(ownerProfitProvider(SalesPeriod.today));
+                ref.invalidate(ownerProfitProvider(SalesPeriod.today.window));
               }
             },
           ),
@@ -55,10 +56,10 @@ class DashboardScreen extends ConsumerWidget {
                   Card3D(
                     maxAngle: 0.05,
                     padding: const EdgeInsets.all(20),
-                    colors: const [Color(0xFF0B1A4A), Color(0xFF14286B), Color(0xFF2563EB)],
+                    colors: AppTheme.heroColors,
                     child: Row(
                       children: [
-                        const Spin3D(angle: 0.35, child: Monogram(text: 'AS', size: 56)),
+                        const Spin3D(angle: 0.35, child: Monogram(text: 'AS', size: 64)),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Text(
@@ -76,6 +77,19 @@ class DashboardScreen extends ConsumerWidget {
                     loading: () => const LinearProgressIndicator(),
                     error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(stockListProvider)),
                     data: (items) {
+                      if (!ref.watch(stockVisibleProvider)) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _StatGrid(children: [
+                              _Stat(label: 'Active products', value: '${items.length}', icon: Icons.inventory_2_outlined,
+                                  onTap: () => context.go('/products')),
+                            ]),
+                            const SizedBox(height: 12),
+                            const StockLockedCard(returnTo: '/'),
+                          ],
+                        );
+                      }
                       final totalUnits = items.fold<int>(0, (a, s) => a + s.saleableQty);
                       final low = items.where((s) => s.isLow && s.saleableQty > 0).length;
                       final out = items.where((s) => s.saleableQty == 0).length;
@@ -223,7 +237,7 @@ class _TodaySalesCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(salesSummaryProvider(SalesPeriod.today));
+    final summary = ref.watch(salesSummaryProvider(SalesPeriod.today.window));
     final theme = Theme.of(context);
     return Card3D(
       onTap: () => context.go('/sales'),
@@ -244,7 +258,7 @@ class _TodaySalesCard extends ConsumerWidget {
                   Text('${s.count} bills · Wholesale ${Money.format(s.wholesale)} · Retail ${Money.format(s.retail)}',
                       style: theme.textTheme.bodySmall),
                   if (showProfit)
-                    ref.watch(ownerProfitProvider(SalesPeriod.today)).when(
+                    ref.watch(ownerProfitProvider(SalesPeriod.today.window)).when(
                           loading: () => const SizedBox.shrink(),
                           error: (_, _) => const SizedBox.shrink(),
                           data: (m) => Text('Profit today: ${Money.format(m['gross_profit'])}',

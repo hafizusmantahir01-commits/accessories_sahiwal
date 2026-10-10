@@ -177,8 +177,9 @@ class CartLine {
 }
 
 class SalesSummary {
-  const SalesSummary({required this.count, required this.netSales, required this.discounts, required this.wholesale, required this.retail});
+  const SalesSummary({required this.count, this.pieces = 0, required this.netSales, required this.discounts, required this.wholesale, required this.retail});
   final int count;
+  final int pieces;
   final Decimal netSales;
   final Decimal discounts;
   final Decimal wholesale;
@@ -186,9 +187,52 @@ class SalesSummary {
 
   factory SalesSummary.fromJson(Map<String, dynamic> j) => SalesSummary(
         count: (j['count'] as num?)?.toInt() ?? 0,
+        pieces: (j['pieces'] as num?)?.toInt() ?? 0,
         netSales: Money.parse(j['net_sales']),
         discounts: Money.parse(j['discounts']),
         wholesale: Money.parse(j['wholesale']),
         retail: Money.parse(j['retail']),
+      );
+}
+
+/// Owner report: one month of sales and profit.
+class MonthProfit {
+  const MonthProfit({required this.month, required this.bills, required this.pieces, required this.netSales, required this.cogs, required this.profit});
+  final DateTime month;
+  final int bills;
+  final int pieces;
+  final Decimal netSales;
+  final Decimal cogs;
+  final Decimal profit;
+
+  factory MonthProfit.fromJson(Map<String, dynamic> j) => MonthProfit(
+        month: DateTime.parse(j['month'] as String),
+        bills: (j['bills'] as num?)?.toInt() ?? 0,
+        pieces: (j['pieces'] as num?)?.toInt() ?? 0,
+        netSales: Money.parse(j['net_sales']),
+        cogs: Money.parse(j['cogs']),
+        profit: Money.parse(j['profit']),
+      );
+}
+
+/// Owner report: how much of one product was sold and the profit on it.
+class ProductProfit {
+  const ProductProfit({required this.productId, required this.code, required this.name, required this.pieces, required this.netSales, required this.cogs, required this.profit});
+  final String productId;
+  final String code;
+  final String name;
+  final int pieces;
+  final Decimal netSales;
+  final Decimal cogs;
+  final Decimal profit;
+
+  factory ProductProfit.fromJson(Map<String, dynamic> j) => ProductProfit(
+        productId: j['product_id'] as String,
+        code: (j['code'] as String?) ?? '',
+        name: (j['name'] as String?) ?? '',
+        pieces: (j['pieces'] as num?)?.toInt() ?? 0,
+        netSales: Money.parse(j['net_sales']),
+        cogs: Money.parse(j['cogs']),
+        profit: Money.parse(j['profit']),
       );
 }

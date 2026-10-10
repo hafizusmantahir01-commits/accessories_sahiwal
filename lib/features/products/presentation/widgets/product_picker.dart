@@ -11,6 +11,7 @@ import '../../data/products_repository.dart';
 import '../../../settings/data/settings_repository.dart';
 import '../../domain/product.dart';
 import 'product_thumb.dart';
+import '../../../private_area/data/private_area_controller.dart';
 
 /// Keyboard-friendly product selection: type/scan a code and press Enter for
 /// an exact match, or search by name and tap a result.
@@ -76,6 +77,7 @@ class _ProductPickerDialogState extends ConsumerState<_ProductPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final results = ref.watch(productListProvider(ProductQuery(search: _query)));
+    final showStock = ref.watch(stockVisibleProvider);
     final size = MediaQuery.sizeOf(context);
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
@@ -136,7 +138,7 @@ class _ProductPickerDialogState extends ConsumerState<_ProductPickerDialog> {
                           return ListTile(
                             leading: ProductThumb(path: p.primaryImage?.path, size: 40, radius: 6),
                             title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Text('${p.code} · stock ${p.saleableQty} · retail ${Money.format(p.retailPrice)}'),
+                            subtitle: Text('${p.code}${showStock ? ' · stock ${p.saleableQty}' : ''} · retail ${Money.format(p.retailPrice)}'),
                             onTap: () => Navigator.pop(context, p),
                           );
                         },
@@ -186,7 +188,9 @@ class _QuickProductDialogState extends ConsumerState<_QuickProductDialog> {
 
   String? _price(String? v) {
     if (v == null || v.trim().isEmpty) return 'Required';
-    return Money.tryParseInput(v) == null ? 'Enter a valid amount' : null;
+    final d = Money.tryParseInput(v);
+    if (d == null) return 'Enter a valid amount';
+    return d.signum <= 0 ? 'Must be more than 0' : null;
   }
 
   Future<void> _save() async {

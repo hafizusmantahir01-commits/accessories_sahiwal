@@ -27,8 +27,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   final _model = TextEditingController();
   final _variant = TextEditingController();
   final _description = TextEditingController();
-  final _wholesale = TextEditingController(text: '0.00');
-  final _retail = TextEditingController(text: '0.00');
+  final _wholesale = TextEditingController();
+  final _retail = TextEditingController();
   final _warrantyNote = TextEditingController();
   final _warrantyDays = TextEditingController(text: '0');
   final _reorder = TextEditingController(text: '5');
@@ -277,9 +277,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                             title: 'Selling prices',
                             child: _ResponsiveRow(children: [
                               _field(_retail, 'Retail price *',
-                                  prefix: 'Rs. ', keyboard: money, validator: (v) => Validators.money(v)),
+                                  prefix: 'Rs. ', keyboard: money, validator: (v) => Validators.price(v, 'Retail price')),
                               _field(_wholesale, 'Wholesale price *',
-                                  prefix: 'Rs. ', keyboard: money, validator: (v) => Validators.money(v)),
+                                  prefix: 'Rs. ', keyboard: money, validator: (v) => Validators.price(v, 'Wholesale price')),
                             ]),
                           ),
                           const SizedBox(height: 16),

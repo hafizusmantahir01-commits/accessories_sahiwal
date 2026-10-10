@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/settings/data/settings_repository.dart';
 
 /// Business logo from settings: uploaded image if set, otherwise the
-/// bundled shop logo (assets/logo.png).
+/// temporary "AS" monogram. Replaceable in Settings without code changes.
 class BrandLogo extends ConsumerWidget {
   const BrandLogo({super.key, this.size = 40});
   final double size;
@@ -31,8 +31,6 @@ class BrandLogo extends ConsumerWidget {
   }
 }
 
-/// Shop logo (assets/logo.png) as a round 3D badge: gold rim, soft depth
-/// shadow and glossy highlight. Falls back to text if the image is missing.
 /// Shop logo (assets/logo.png). The image already has its own gold ring,
 /// so only a soft shadow is added underneath for the 3D lift.
 class Monogram extends StatelessWidget {
@@ -50,11 +48,7 @@ class Monogram extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            blurRadius: size * 0.18,
-            offset: Offset(0, size * 0.06),
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.30), blurRadius: size * 0.18, offset: Offset(0, size * 0.06)),
         ],
       ),
       child: Image.asset(
@@ -65,14 +59,7 @@ class Monogram extends StatelessWidget {
         filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          child: Text(
-            text,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: size * 0.35,
-            ),
-          ),
+          child: Text(text, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * 0.35)),
         ),
       ),
     );
@@ -88,9 +75,7 @@ class BrandHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(businessSettingsProvider);
-    final name = settings.hasValue
-        ? settings.requireValue.businessName
-        : 'Accessories Sahiwal';
+    final name = settings.hasValue ? settings.requireValue.businessName : 'Accessories Sahiwal';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -101,9 +86,7 @@ class BrandHeader extends ConsumerWidget {
             child: Text(
               name,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
         ],

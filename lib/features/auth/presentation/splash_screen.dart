@@ -16,14 +16,7 @@ class SplashScreen extends StatelessWidget {
             children: [
               Spin3D(angle: 0.3, child: Monogram(text: 'AS', size: 130)),
               SizedBox(height: 28),
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 3,
-                ),
-              ),
+              SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: Color(0xFFE2C77E), strokeWidth: 3)),
             ],
           ),
         ),

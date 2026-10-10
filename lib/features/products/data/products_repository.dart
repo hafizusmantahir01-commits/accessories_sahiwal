@@ -145,6 +145,12 @@ class ProductsRepository {
   /// Owner only. Works only for products never used in stock, purchases or
   /// sales (the server refuses otherwise — archive those instead).
   /// Recorded in the activity history with the reason.
+  /// What deleting this product would remove (for the confirm box).
+  Future<Map<String, dynamic>> deletePreview(String productId) => _wrap(() async {
+        final res = await _db.rpc('owner_product_delete_preview', params: {'p_product_id': productId});
+        return Map<String, dynamic>.from(res as Map);
+      });
+
   Future<void> deleteProduct(String productId, String reason) => _wrap(() async {
         final res = await _db.rpc('owner_delete_product', params: {
           'p_product_id': productId,

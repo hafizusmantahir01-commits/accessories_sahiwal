@@ -36,7 +36,7 @@ class AppException implements Exception {
       if (msg.startsWith('BELOW_COST:')) {
         return AppException(msg.substring('BELOW_COST:'.length).trim(), kind: AppErrorKind.belowCost);
       }
-      for (final prefix in const ['PRODUCT_IN_USE:', 'INSUFFICIENT_STOCK:']) {
+      for (final prefix in const ['PRODUCT_IN_USE:', 'INSUFFICIENT_STOCK:', 'ALREADY_SOLD:']) {
         if (msg.startsWith(prefix)) {
           return AppException(msg.substring(prefix.length).trim(), kind: AppErrorKind.validation);
         }

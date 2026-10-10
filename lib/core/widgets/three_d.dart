@@ -205,16 +205,16 @@ class Background3D extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-                       colors: [Color(0xFF06142C), Color(0xFF0B1F3F), Color(0xFF3F5B8C)],
+          colors: [Color(0xFF06142C), Color(0xFF0B1F3F), Color(0xFF3F5B8C)],
         ),
       ),
       child: Stack(
         fit: StackFit.expand,
         children: [
-                                Positioned(top: -80, left: -60, child: orb(260, const Color(0x55B08D3C))),
-             Positioned(bottom: -120, right: -80, child: orb(340, const Color(0x553F5B8C))),
-             Positioned(top: 120, right: 40, child: orb(90, const Color(0x66E2C77E))),
-             Positioned(bottom: 160, left: 30, child: orb(60, const Color(0x55B08D3C))),
+          Positioned(top: -80, left: -60, child: orb(260, const Color(0x55B08D3C))),
+          Positioned(bottom: -120, right: -80, child: orb(340, const Color(0x553F5B8C))),
+          Positioned(top: 120, right: 40, child: orb(90, const Color(0x66E2C77E))),
+          Positioned(bottom: 160, left: 30, child: orb(60, const Color(0x55B08D3C))),
           child,
         ],
       ),

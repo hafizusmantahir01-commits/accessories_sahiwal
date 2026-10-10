@@ -107,6 +107,27 @@ class PurchasesRepository {
         () async => _db.rpc('owner_delete_purchase_draft', params: {'p_purchase_id': id}),
       );
 
+  /// Correct quantity / unit price of a line in a POSTED purchase.
+  Future<void> editLine({required String itemId, required int quantity, required Decimal unitPrice, required String reason}) =>
+      guardedPrivate(_ref, () async {
+        await _db.rpc('owner_edit_purchase_line', params: {
+          'p_item_id': itemId,
+          'p_quantity': quantity,
+          'p_unit_price': unitPrice.toString(),
+          'p_reason': reason,
+        });
+      });
+
+  /// Remove one line from a posted purchase (only if none of it was sold).
+  Future<void> deleteLine(String itemId, String reason) => guardedPrivate(_ref, () async {
+        await _db.rpc('owner_delete_purchase_line', params: {'p_item_id': itemId, 'p_reason': reason});
+      });
+
+  /// Delete a whole posted purchase (only if none of it was sold).
+  Future<void> deletePurchase(String id, String reason) => guardedPrivate(_ref, () async {
+        await _db.rpc('owner_delete_purchase', params: {'p_purchase_id': id, 'p_reason': reason});
+      });
+
   /// Purchases already using this supplier bill number (warning only).
   Future<List<String>> duplicateRefs({required String supplierId, required String ref, String? excludeId}) =>
       guardedPrivate(_ref, () async {
@@ -136,7 +157,8 @@ final purchaseProvider = FutureProvider.autoDispose.family<Purchase, String>(
 );
 
 class PurchaseStockLine {
-  const PurchaseStockLine({required this.code, required this.name, required this.qtyIn, required this.qtyLeft, required this.qtySold});
+  const PurchaseStockLine({this.itemId = '', required this.code, required this.name, required this.qtyIn, required this.qtyLeft, required this.qtySold});
+  final String itemId;
   final String code;
   final String name;
   final int qtyIn;
@@ -144,6 +166,7 @@ class PurchaseStockLine {
   final int qtySold;
 
   factory PurchaseStockLine.fromJson(Map<String, dynamic> j) => PurchaseStockLine(
+        itemId: (j['purchase_item_id'] as String?) ?? '',
         code: (j['product_code'] as String?) ?? '',
         name: (j['product_name'] as String?) ?? '',
         qtyIn: (j['qty_in'] as num).toInt(),

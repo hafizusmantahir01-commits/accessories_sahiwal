@@ -8,6 +8,7 @@ import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
+import '../../products/data/products_repository.dart';
 import '../../products/presentation/widgets/product_picker.dart';
 import '../../suppliers/data/suppliers_repository.dart';
 import '../../suppliers/presentation/suppliers_screen.dart';
@@ -18,7 +19,7 @@ import 'post_purchase_dialog.dart';
 class _LineEditor {
   _LineEditor(this.line)
       : qty = TextEditingController(text: '${line.quantity}'),
-        price = TextEditingController(text: Money.toInput(line.unitPrice)),
+        price = TextEditingController(text: line.unitPrice == Decimal.zero ? '' : Money.toInput(line.unitPrice)),
         discount = TextEditingController(
           text: line.lineDiscount == Decimal.zero ? '' : Money.toInput(line.lineDiscount),
         );
@@ -43,8 +44,11 @@ class _LineEditor {
 
 /// Draft → review → fully-paid posting. Saving a draft never changes stock.
 class PurchaseEditorScreen extends ConsumerStatefulWidget {
-  const PurchaseEditorScreen({super.key, this.purchaseId});
+  const PurchaseEditorScreen({super.key, this.purchaseId, this.productId});
   final String? purchaseId;
+
+  /// Start a NEW purchase with this product already added ("Add new stock").
+  final String? productId;
 
   @override
   ConsumerState<PurchaseEditorScreen> createState() => _PurchaseEditorScreenState();
@@ -70,7 +74,24 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
   void initState() {
     super.initState();
     _draftId = widget.purchaseId;
-    if (_draftId != null) _load();
+    if (_draftId != null) {
+      _load();
+    } else if (widget.productId != null) {
+      _prefillProduct(widget.productId!);
+    }
+  }
+
+  Future<void> _prefillProduct(String id) async {
+    try {
+      final p = await ref.read(productsRepositoryProvider).get(id);
+      if (!mounted) return;
+      setState(() {
+        _lines.add(_LineEditor(DraftLine(productId: p.id, productCode: p.code, productName: p.name)));
+        _dirty = true;
+      });
+    } catch (e) {
+      if (mounted) context.showError(e);
+    }
   }
 
   Future<void> _load() async {
@@ -169,6 +190,14 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
     }
     for (final l in _lines) {
       l.sync();
+      if (l.line.quantity <= 0) {
+        context.showError('${l.line.productName}: enter the quantity.');
+        return false;
+      }
+      if (l.line.unitPrice <= Decimal.zero) {
+        context.showError('${l.line.productName}: enter the unit price (supplier rate) first.');
+        return false;
+      }
       if (!l.line.discountValid) {
         context.showError('${l.line.productName}: discount cannot exceed the line value.');
         return false;
@@ -474,8 +503,8 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
                               child: TextFormField(
                                 controller: e.price,
                                 keyboardType: money,
-                                decoration: const InputDecoration(labelText: 'Unit price'),
-                                validator: (v) => Validators.money(v),
+                                decoration: const InputDecoration(labelText: 'Unit price *'),
+                                validator: (v) => Validators.price(v, 'Unit price'),
                                 onChanged: (_) => _changed(),
                               ),
                             ),

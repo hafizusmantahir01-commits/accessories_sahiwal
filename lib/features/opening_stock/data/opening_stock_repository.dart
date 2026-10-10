@@ -53,6 +53,20 @@ class OpeningStockRepository {
         return res as String;
       });
 
+  Future<void> edit({required String id, required int quantity, required Decimal unitCost, required String reason}) =>
+      guardedPrivate(_ref, () async {
+        await _db.rpc('owner_edit_opening_stock', params: {
+          'p_entry_id': id,
+          'p_quantity': quantity,
+          'p_unit_cost': unitCost.toString(),
+          'p_reason': reason,
+        });
+      });
+
+  Future<void> delete(String id, String reason) => guardedPrivate(_ref, () async {
+        await _db.rpc('owner_delete_opening_stock', params: {'p_entry_id': id, 'p_reason': reason});
+      });
+
   Future<List<OpeningEntry>> list() => guardedPrivate(_ref, () async {
         final rows = await _db.privateFrom('opening_stock_entries').select().order('created_at', ascending: false).limit(200);
         final ids = {for (final r in rows) r['product_id'] as String}.toList();

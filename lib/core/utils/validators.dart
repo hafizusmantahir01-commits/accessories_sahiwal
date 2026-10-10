@@ -35,6 +35,16 @@ abstract final class Validators {
     return Money.tryParseInput(t) == null ? 'Enter a valid amount (max 2 decimals)' : null;
   }
 
+  /// Price that MUST be filled and above zero (selling price, purchase rate, cost).
+  static String? price(String? v, [String label = 'Price']) {
+    final t = v?.trim() ?? '';
+    if (t.isEmpty) return '$label is required';
+    final d = Money.tryParseInput(t);
+    if (d == null) return 'Enter a valid amount (max 2 decimals)';
+    if (d.signum <= 0) return '$label must be more than 0';
+    return null;
+  }
+
   /// Product code: letters, digits, . _ / - (max 40). Blank = auto-generate.
   static String? productCode(String? v) {
     final t = v?.trim().toUpperCase() ?? '';

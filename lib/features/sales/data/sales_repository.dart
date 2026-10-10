@@ -109,6 +109,15 @@ class SalesRepository {
         return rows.map(Customer.fromJson).toList();
       });
 
+  /// product id → price this shopkeeper paid last time.
+  Future<Map<String, Decimal>> customerLastPrices(String customerId) => _wrap(() async {
+        final rows = await _db.rpc('customer_last_prices', params: {'p_customer_id': customerId});
+        return {
+          for (final r in (rows as List).map((e) => Map<String, dynamic>.from(e as Map)))
+            r['product_id'] as String: Decimal.parse(r['unit_price'].toString()),
+        };
+      });
+
   Future<SalesSummary> summary(DateTime from, DateTime to) => _wrap(() async {
         final res = await _db.rpc('sales_summary', params: {
           'p_from': BizTime.isoDate(from),
@@ -131,6 +140,27 @@ class SalesRepository {
         return Map<String, dynamic>.from(res as Map);
       });
 
+  Future<DateTime?> firstSaleDate() => _wrap(() async {
+        final res = await _db.rpc('sales_first_date');
+        return res == null ? null : DateTime.parse(res.toString());
+      });
+
+  Future<List<MonthProfit>> profitByMonth(DateTime from, DateTime to) => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_profit_by_month', params: {
+          'p_from': BizTime.isoDate(from),
+          'p_to': BizTime.isoDate(to),
+        });
+        return (rows as List).map((e) => MonthProfit.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      });
+
+  Future<List<ProductProfit>> profitByProduct(DateTime from, DateTime to) => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_profit_by_product', params: {
+          'p_from': BizTime.isoDate(from),
+          'p_to': BizTime.isoDate(to),
+        });
+        return (rows as List).map((e) => ProductProfit.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      });
+
   Future<void> voidSale(String saleId, String reason) => guardedPrivate(
         _ref,
         () async => _db.rpc('owner_void_sale', params: {'p_sale_id': saleId, 'p_reason': reason.trim()}),
@@ -141,36 +171,83 @@ final salesRepositoryProvider = Provider<SalesRepository>(
   (ref) => SalesRepository(ref, ref.watch(supabaseProvider)),
 );
 
-/// Period presets for the sales screen.
-enum SalesPeriod {
-  today('Today', 0),
-  week('7 days', 6),
-  month('30 days', 29);
+/// A date range for sales reports (Karachi calendar days, both ends included).
+class SalesWindow {
+  SalesWindow(DateTime from, DateTime to, this.label)
+      : from = DateTime(from.year, from.month, from.day),
+        to = DateTime(to.year, to.month, to.day);
 
-  const SalesPeriod(this.label, this.daysBack);
+  final DateTime from;
+  final DateTime to;
   final String label;
-  final int daysBack;
 
-  (DateTime, DateTime) get range {
-    final to = BizTime.today();
-    return (to.subtract(Duration(days: daysBack)), to);
-  }
+  int get days => to.difference(from).inDays + 1;
+
+  @override
+  bool operator ==(Object other) => other is SalesWindow && other.from == from && other.to == to;
+
+  @override
+  int get hashCode => Object.hash(from, to);
 }
 
-final salesListProvider = FutureProvider.autoDispose.family<List<Sale>, SalesPeriod>((ref, p) {
-  final (from, to) = p.range;
-  return ref.watch(salesRepositoryProvider).list(from: from, to: to);
-});
+/// Period presets for the sales screen.
+enum SalesPeriod {
+  today('Today'),
+  week('7 days'),
+  month('30 days'),
+  thisMonth('This month'),
+  year('This year'),
+  all('All time');
 
-final salesSummaryProvider = FutureProvider.autoDispose.family<SalesSummary, SalesPeriod>((ref, p) {
-  final (from, to) = p.range;
-  return ref.watch(salesRepositoryProvider).summary(from, to);
-});
+  const SalesPeriod(this.label);
+  final String label;
 
-final ownerProfitProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, SalesPeriod>((ref, p) {
-  final (from, to) = p.range;
-  return ref.watch(salesRepositoryProvider).profitSummary(from, to);
-});
+  SalesWindow get window {
+    final to = BizTime.today();
+    return switch (this) {
+      SalesPeriod.today => SalesWindow(to, to, label),
+      SalesPeriod.week => SalesWindow(to.subtract(const Duration(days: 6)), to, label),
+      SalesPeriod.month => SalesWindow(to.subtract(const Duration(days: 29)), to, label),
+      SalesPeriod.thisMonth => SalesWindow(DateTime(to.year, to.month, 1), to, label),
+      SalesPeriod.year => SalesWindow(DateTime(to.year, 1, 1), to, label),
+      // From the very first day (before any sale could exist) up to today.
+      SalesPeriod.all => SalesWindow(DateTime(2000, 1, 1), to, 'All time (since start)'),
+    };
+  }
+
+  (DateTime, DateTime) get range => (window.from, window.to);
+}
+
+/// One full calendar year (up to today for the current year).
+SalesWindow yearWindow(int year) {
+  final today = BizTime.today();
+  final end = year == today.year ? today : DateTime(year, 12, 31);
+  return SalesWindow(DateTime(year, 1, 1), end, 'Year $year');
+}
+
+final salesListProvider = FutureProvider.autoDispose.family<List<Sale>, SalesWindow>(
+  (ref, w) => ref.watch(salesRepositoryProvider).list(from: w.from, to: w.to),
+);
+
+final salesSummaryProvider = FutureProvider.autoDispose.family<SalesSummary, SalesWindow>(
+  (ref, w) => ref.watch(salesRepositoryProvider).summary(w.from, w.to),
+);
+
+final ownerProfitProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, SalesWindow>(
+  (ref, w) => ref.watch(salesRepositoryProvider).profitSummary(w.from, w.to),
+);
+
+final profitByMonthProvider = FutureProvider.autoDispose.family<List<MonthProfit>, SalesWindow>(
+  (ref, w) => ref.watch(salesRepositoryProvider).profitByMonth(w.from, w.to),
+);
+
+final profitByProductProvider = FutureProvider.autoDispose.family<List<ProductProfit>, SalesWindow>(
+  (ref, w) => ref.watch(salesRepositoryProvider).profitByProduct(w.from, w.to),
+);
+
+final firstSaleDateProvider = FutureProvider.autoDispose<DateTime?>(
+  (ref) => ref.watch(salesRepositoryProvider).firstSaleDate(),
+);
 
 final saleProvider = FutureProvider.autoDispose.family<Sale, String>(
   (ref, id) => ref.watch(salesRepositoryProvider).get(id),

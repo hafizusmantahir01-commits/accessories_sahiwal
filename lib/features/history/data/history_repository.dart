@@ -55,6 +55,8 @@ class ActivityEntry {
         'sale_voided' => Icons.cancel_outlined,
         'purchase_posted' => Icons.shopping_cart_outlined,
         'opening_stock_posted' => Icons.inventory_outlined,
+        'purchase_line_edited' || 'opening_stock_edited' => Icons.edit_note,
+        'purchase_line_deleted' || 'purchase_deleted' || 'opening_stock_deleted' => Icons.delete_forever_outlined,
         'category_created' || 'category_updated' || 'category_deleted' => Icons.category_outlined,
         'user_access_changed' || 'partner_created' || 'sessions_revoked' ||
         'partner_password_reset' || 'partner_login_enabled' || 'partner_login_disabled' ||
@@ -80,6 +82,12 @@ class ActivityEntry {
         'sale_voided' => 'Voided sale ${_v('invoice_no')} · ${Money.format(before['total'])}',
         'purchase_posted' => 'Purchase ${_v('purchase_no')} · ${Money.format(after['total'])}',
         'opening_stock_posted' => 'Opening stock: ${_v('quantity')} pcs @ ${Money.format(after['unit_cost'])}',
+        'purchase_line_edited' => 'Corrected ${_v('purchase_no')}: ${_v('name')} (${_v('code')})',
+        'purchase_line_deleted' => 'Removed ${_v('name')} (${_v('code')}) from ${_v('purchase_no')}',
+        'purchase_deleted' => 'Deleted purchase ${_v('purchase_no')} · ${Money.format(before['total'])}',
+        'opening_stock_edited' => 'Corrected opening stock: ${_v('name')} (${_v('code')})',
+        'opening_stock_deleted' =>
+          'Deleted opening stock: ${before['quantity']} × ${_v('name')} (${_v('code')})',
         'category_created' => 'Created category ${_v('name')}',
         'category_updated' => 'Renamed category ${before['name']} → ${after['name']}',
         'category_deleted' => 'Deleted category ${_v('name')}',
@@ -120,6 +128,35 @@ class ActivityEntry {
           lines.add('$label: ${money ? Money.format(a) : a} → ${money ? Money.format(b) : b}');
         }
       }
+    }
+    if (action == 'purchase_line_edited' || action == 'opening_stock_edited') {
+      final priceKey = action == 'purchase_line_edited' ? 'unit_price' : 'unit_cost';
+      lines.add('${before['quantity']} × ${Money.format(before[priceKey])} → '
+          '${after['quantity']} × ${Money.format(after[priceKey])}');
+      if (before['total'] != null && after['total'] != null) {
+        lines.add('Purchase total ${Money.format(before['total'])} → ${Money.format(after['total'])}');
+      }
+    }
+    if (action == 'purchase_line_deleted') {
+      lines.add('${before['quantity']} × ${Money.format(before['unit_price'])} removed');
+      lines.add('Purchase total ${Money.format(before['total'])} → ${Money.format(after['total'])}');
+    }
+    if (action == 'purchase_deleted') {
+      if (before['supplier'] != null) lines.add('Supplier: ${before['supplier']}');
+      for (final i in (before['items'] as List? ?? const [])) {
+        final m = Map<String, dynamic>.from(i as Map);
+        lines.add('${m['quantity']} × ${m['name']} (${m['code']}) @ ${Money.format(m['unit_price'])}');
+      }
+    }
+    if (action == 'product_deleted') {
+      final stock = before['stock'];
+      if (stock is num && stock > 0) lines.add('Stock removed: $stock pcs');
+      for (final i in (before['purchase_lines'] as List? ?? const [])) {
+        final m = Map<String, dynamic>.from(i as Map);
+        lines.add('${m['purchase_no']}: ${m['quantity']} × ${Money.format(m['unit_price'])} removed');
+      }
+      final opening = before['opening_qty'];
+      if (opening is num && opening > 0) lines.add('Opening stock removed: $opening pcs');
     }
     if (action == 'sale_completed') {
       if (_v('customer').isNotEmpty) lines.add('Customer: ${_v('customer')}');

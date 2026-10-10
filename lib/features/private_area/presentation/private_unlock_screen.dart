@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/widgets/common.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/private_area_controller.dart';
 
 /// Second step for the owner's "locked folder". The app never stores the
@@ -50,7 +51,7 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
 
   void _continue() {
     final target = widget.from;
-    context.go(target != null && target.startsWith('/private') && target != '/private/unlock' ? target : '/private');
+    context.go(target != null && target.startsWith('/') && !target.startsWith('/private/unlock') ? target : '/private');
   }
 
   Future<void> _submit({required bool creating}) async {
@@ -68,7 +69,7 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
         _secret.clear();
         _continue();
       } else {
-        setState(() => _error = 'Incorrect private password.');
+        setState(() => _error = 'Incorrect password.');
       }
     } catch (e) {
       if (mounted) setState(() => _error = AppException.from(e).message);
@@ -80,7 +81,8 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(privateAreaProvider);
-    final creating = state.checked && !state.hasSecret;
+    final partner = ref.watch(profileOrNullProvider)?.isFullPartner ?? false;
+    final creating = !partner && state.checked && !state.hasSecret;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -99,7 +101,9 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
                       Icon(Icons.lock_person_outlined, size: 56, color: theme.colorScheme.primary),
                       const SizedBox(height: 16),
                       Text(
-                        creating ? 'Create your private password' : 'Enter private password',
+                        creating
+                            ? 'Create your private password'
+                            : (partner ? 'Enter your login password' : 'Enter private password'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleLarge,
                       ),
@@ -108,8 +112,8 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
                         creating
                             ? 'This second password protects purchases, costs, profit and user management. '
                                 'Use a different password from your login.'
-                            : 'Purchases, suppliers, costs and profit are protected. '
-                                'The area locks after 10 minutes of inactivity and on sign-out.',
+                            : 'Stock, purchases, costs and profit are hidden until you unlock. '
+                                'It locks again after 10 minutes of inactivity, when the app is closed, and on sign-out.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline),
                       ),
@@ -120,7 +124,9 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
                         autofocus: true,
                         autofillHints: const [AutofillHints.password],
                         decoration: InputDecoration(
-                          labelText: creating ? 'New private password' : 'Private password',
+                          labelText: creating
+                              ? 'New private password'
+                              : (partner ? 'Your login password' : 'Private password'),
                           prefixIcon: const Icon(Icons.key_outlined),
                         ),
                         validator: (v) {
@@ -155,7 +161,7 @@ class _PrivateUnlockScreenState extends ConsumerState<PrivateUnlockScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
+                      if (!partner) Text(
                         'Forgot it? See "Reset private password" in the owner guide — it requires access to '
                         'the Supabase dashboard and revokes all existing unlocks.',
                         textAlign: TextAlign.center,

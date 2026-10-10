@@ -43,23 +43,33 @@ class PrivateAreaController extends Notifier<PrivateAreaState> {
   DateTime _lastTouch = DateTime.fromMillisecondsSinceEpoch(0);
   bool _touching = false;
   bool _fullPartner = false;
+  static final Set<String> _lockedAtStart = <String>{};
+  Future<void>? _startupLock;
 
   PrivateAreaRepository get _repo => ref.read(privateAreaRepositoryProvider);
 
   @override
   PrivateAreaState build() {
     // Reset whenever a different user signs in or out.
-    ref.watch(currentUserIdProvider);
+    final userId = ref.watch(currentUserIdProvider);
     ref.onDispose(() => _ticker?.cancel());
     _ticker?.cancel();
-    // A full-access partner never needs the private password.
+    // A full-access partner unlocks with their own login password.
     _fullPartner = ref.watch(profileOrNullProvider.select((p) => p?.isFullPartner ?? false));
-    if (_fullPartner) return const PrivateAreaState(unlocked: true, checked: true);
-    return const PrivateAreaState();
+    // Every fresh start of the app begins LOCKED (also on the server), so a
+    // closed and reopened app never shows the private area or stock.
+    if (userId != null && _lockedAtStart.add(userId)) {
+      _startupLock = Future.microtask(() async {
+        try {
+          await _repo.lock();
+        } catch (_) {}
+      });
+    }
+    return const PrivateAreaState(checked: true);
   }
 
   Future<void> refresh() async {
-    if (_fullPartner) return;
+    await _startupLock;
     final s = await _repo.status();
     if (s.unlocked) {
       _startTicker();
@@ -77,7 +87,8 @@ class PrivateAreaController extends Notifier<PrivateAreaState> {
 
   /// Returns false when the password is wrong.
   Future<bool> unlock(String secret) async {
-    final ok = await _repo.unlock(secret);
+    await _startupLock;
+    final ok = _fullPartner ? await _repo.unlockWithLogin(secret) : await _repo.unlock(secret);
     if (ok) {
       _lastTouch = DateTime.now();
       _startTicker();
@@ -99,7 +110,6 @@ class PrivateAreaController extends Notifier<PrivateAreaState> {
   }
 
   Future<void> lock() async {
-    if (_fullPartner) return;
     _ticker?.cancel();
     state = PrivateAreaState(unlocked: false, hasSecret: state.hasSecret, checked: true);
     try {
@@ -109,14 +119,14 @@ class PrivateAreaController extends Notifier<PrivateAreaState> {
 
   /// Called when the server reports PRIVATE_LOCKED.
   void markLocked() {
-    if (_fullPartner || !state.unlocked) return;
+    if (!state.unlocked) return;
     _ticker?.cancel();
     state = PrivateAreaState(unlocked: false, hasSecret: state.hasSecret, checked: true);
   }
 
   /// Owner interacted with a private screen: extend the server window (throttled).
   Future<void> registerActivity() async {
-    if (_fullPartner || !state.unlocked || _touching) return;
+    if (!state.unlocked || _touching) return;
     final now = DateTime.now();
     if (now.difference(_lastTouch) < _touchEvery) return;
     _touching = true;
@@ -148,3 +158,7 @@ class PrivateAreaController extends Notifier<PrivateAreaState> {
 
 final privateAreaProvider =
     NotifierProvider<PrivateAreaController, PrivateAreaState>(PrivateAreaController.new);
+
+/// Stock quantities are shown only while the private area is unlocked,
+/// so the app can be shown to a shopkeeper without revealing stock.
+final stockVisibleProvider = Provider<bool>((ref) => ref.watch(privateAreaProvider.select((s) => s.unlocked)));

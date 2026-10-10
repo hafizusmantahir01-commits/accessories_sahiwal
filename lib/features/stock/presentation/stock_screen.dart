@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/widgets/common.dart';
 import '../data/stock_repository.dart';
+import '../../private_area/data/private_area_controller.dart';
+import '../../private_area/presentation/stock_locked.dart';
 import 'stock_history_sheet.dart';
 
 /// Available quantities and low-stock alerts (no cost data).
@@ -39,6 +41,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!ref.watch(stockVisibleProvider)) return const StockLockedScreen();
     final q = StockQuery(search: _query, lowOnly: _lowOnly);
     final stock = ref.watch(stockListProvider(q));
     final theme = Theme.of(context);

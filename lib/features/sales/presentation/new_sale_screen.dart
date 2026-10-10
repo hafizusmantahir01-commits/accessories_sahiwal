@@ -16,6 +16,7 @@ import '../../products/presentation/widgets/product_picker.dart';
 import '../../stock/data/stock_repository.dart';
 import '../data/sales_repository.dart';
 import '../domain/sale.dart';
+import '../../private_area/data/private_area_controller.dart';
 
 class _Prices {
   const _Prices(this.wholesale, this.retail);
@@ -46,6 +47,8 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   final _customerName = TextEditingController();
   final _customerPhone = TextEditingController();
   String? _customerId;
+  /// Price each product was last sold to the selected shopkeeper.
+  Map<String, Decimal> _lastPrices = const {};
   final _finalAmount = TextEditingController();
   final _reason = TextEditingController();
   final _tendered = TextEditingController();
@@ -112,11 +115,39 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         _qtyCtl[id]!.text = '${existing.first.quantity}';
       } else {
         final price = _type == SaleType.wholesale ? wholesale : retail;
-        _lines.add(CartLine(productId: id, code: code, name: name, available: available, defaultPrice: price, quantity: 1));
+        final remembered = _canPrice ? _lastPrices[id] : null;
+        final line = CartLine(
+            productId: id, code: code, name: name, available: available, defaultPrice: price, quantity: 1,
+            unitPrice: remembered);
+        _lines.add(line);
         _qtyCtl[id] = TextEditingController(text: '1');
-        _priceCtl[id] = TextEditingController(text: Money.toInput(price));
+        _priceCtl[id] = TextEditingController(text: Money.toInput(line.unitPrice));
       }
     });
+  }
+
+  bool get _canPrice {
+    final me = ref.read(profileOrNullProvider);
+    return (me?.isOwner ?? false) || (me?.canOverridePrice ?? false);
+  }
+
+  /// Shopkeeper chosen: use the prices they paid last time (lines not edited by hand).
+  Future<void> _loadLastPrices(String customerId) async {
+    try {
+      final map = await ref.read(salesRepositoryProvider).customerLastPrices(customerId);
+      if (!mounted || _customerId != customerId) return;
+      setState(() {
+        _lastPrices = map;
+        if (!_canPrice) return;
+        for (final l in _lines) {
+          final last = map[l.productId];
+          if (last != null && !l.priceChanged) {
+            l.unitPrice = last;
+            _priceCtl[l.productId]?.text = Money.toInput(last);
+          }
+        }
+      });
+    } catch (_) {/* prices stay at the list price */}
   }
 
   Future<void> _addByCode(String code) async {
@@ -186,8 +217,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           available: old.available,
           defaultPrice: price,
           quantity: old.quantity,
+          unitPrice: t == SaleType.wholesale && _canPrice ? _lastPrices[old.productId] : null,
         );
-        _priceCtl[old.productId]?.text = Money.toInput(price);
+        _priceCtl[old.productId]?.text = Money.toInput(_lines[i].unitPrice);
       }
     });
   }
@@ -198,6 +230,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     if (_type == SaleType.wholesale && _customerName.text.trim().isEmpty) return 'Enter the shopkeeper.';
     for (final l in _lines) {
       if (l.quantity <= 0) return '${l.name}: quantity must be at least 1.';
+      if (l.unitPrice <= Decimal.zero) return '${l.name}: price is 0. Enter the price first.';
       if (l.overStock) return '${l.name}: only ${l.available} in stock.';
     }
     if (_finalAmount.text.trim().isNotEmpty) {
@@ -385,6 +418,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               },
               onSelected: (c) => setState(() {
                 _customerId = c.id;
+                _loadLastPrices(c.id);
                 _customerName.text = c.name;
                 _customerPhone.text = c.phone;
               }),
@@ -402,6 +436,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                   onChanged: (v) => setState(() {
                     _customerName.text = v;
                     _customerId = null; // typed a new / different name
+                    _lastPrices = const {};
                   }),
                 );
               },
@@ -480,7 +515,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(l.name, style: theme.textTheme.titleSmall),
-                              Text('${l.code} · ${l.available} in stock',
+                              Text(ref.watch(stockVisibleProvider) || l.overStock
+                                      ? '${l.code} · ${l.available} in stock'
+                                      : l.code,
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: l.overStock ? AppTheme.danger : theme.colorScheme.outline,
                                   )),
@@ -531,7 +568,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                     isDense: true,
                                     labelText: 'Price',
                                     prefixText: 'Rs. ',
-                                    helperText: l.priceChanged ? 'List ${Money.format(l.defaultPrice)}' : null,
+                                    helperText: [
+                                      if (_lastPrices[l.productId] != null)
+                                        'Last time ${Money.format(_lastPrices[l.productId])}',
+                                      if (l.priceChanged) 'List ${Money.format(l.defaultPrice)}',
+                                    ].join(' · ').ifEmptyNull,
                                   ),
                                   onChanged: (v) => setState(() => l.unitPrice = Money.tryParseInput(v) ?? l.defaultPrice),
                                 )
@@ -660,4 +701,8 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           child: Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 10), child: _completeButton()),
         ),
       );
+}
+
+extension on String {
+  String? get ifEmptyNull => isEmpty ? null : this;
 }
