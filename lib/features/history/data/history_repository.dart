@@ -60,6 +60,8 @@ class ActivityEntry {
         'partner_password_reset' || 'partner_login_enabled' || 'partner_login_disabled' ||
         'partner_full_access_on' || 'partner_full_access_off' => Icons.manage_accounts_outlined,
         'private_secret_changed' || 'private_unlock_failed' => Icons.key_outlined,
+        'device_approved' || 'device_blocked' || 'device_removed' || 'device_approval_on' || 'device_approval_off' =>
+          Icons.phonelink_lock,
         _ => Icons.history,
       };
 
@@ -92,6 +94,11 @@ class ActivityEntry {
         'private_secret_changed' => 'Changed the private password',
         'private_unlock_failed' => 'Wrong private password attempt',
         'trading_started' => 'Closed opening stock',
+        'device_approved' => 'Approved a device ${reason ?? ''}',
+        'device_blocked' => 'Blocked a device ${reason ?? ''}',
+        'device_removed' => 'Removed a device ${reason ?? ''}',
+        'device_approval_on' => 'Turned on device approval',
+        'device_approval_off' => 'Turned off device approval',
         _ => action.replaceAll('_', ' '),
       };
 

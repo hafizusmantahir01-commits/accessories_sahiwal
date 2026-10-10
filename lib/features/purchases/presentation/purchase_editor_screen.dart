@@ -132,7 +132,7 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
   }
 
   Future<void> _addLine() async {
-    final p = await pickProduct(context);
+    final p = await pickProduct(context, allowCreate: true);
     if (p == null || !mounted) return;
     final existing = _lines.where((l) => l.line.productId == p.id).toList();
     if (existing.isNotEmpty) {

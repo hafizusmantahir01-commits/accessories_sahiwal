@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'app/theme.dart';
 import 'core/config/env.dart';
+import 'core/device/device_identity.dart';
 import 'core/widgets/brand_logo.dart';
 import 'core/widgets/three_d.dart';
 
@@ -16,7 +17,13 @@ Future<void> main() async {
     return;
   }
 
-  await Supabase.initialize(url: Env.supabaseUrl, anonKey: Env.supabaseAnonKey);
+  // Every request carries this install's id so the server can approve/block devices.
+  await DeviceIdentity.init();
+  await Supabase.initialize(
+    url: Env.supabaseUrl,
+    anonKey: Env.supabaseAnonKey,
+    headers: {'x-device-id': DeviceIdentity.id},
+  );
   runApp(const ProviderScope(child: AccessoriesSahiwalApp()));
 }
 

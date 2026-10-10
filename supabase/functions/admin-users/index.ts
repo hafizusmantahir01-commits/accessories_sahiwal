@@ -9,7 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-device-id",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
 
   // 1) Verify the caller is the owner with an unlocked private area.
   const asCaller = createClient(url, anonKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader, "x-device-id": req.headers.get("x-device-id") ?? "" } },
     auth: { persistSession: false },
   });
   const { data: status, error: statusErr } = await asCaller.rpc("private_status");

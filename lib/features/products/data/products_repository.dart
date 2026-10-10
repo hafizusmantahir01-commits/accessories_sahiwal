@@ -267,3 +267,29 @@ final productProvider = FutureProvider.autoDispose.family<Product, String>(
 final ownerProductCostProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
   (ref, id) => ref.watch(productsRepositoryProvider).ownerCost(id),
 );
+
+/// Owner: stock of one product split by purchase (oldest first = sold first).
+class StockLot {
+  const StockLot({required this.source, required this.receivedAt, required this.qtyIn, required this.qtyLeft, required this.unitCost});
+  final String source;
+  final DateTime receivedAt;
+  final int qtyIn;
+  final int qtyLeft;
+  final Object? unitCost;
+
+  factory StockLot.fromJson(Map<String, dynamic> j) => StockLot(
+        source: (j['source_label'] as String?) ?? '',
+        receivedAt: DateTime.parse(j['received_at'] as String),
+        qtyIn: (j['qty_in'] as num).toInt(),
+        qtyLeft: (j['qty_left'] as num).toInt(),
+        unitCost: j['unit_cost'],
+      );
+}
+
+final productLotsProvider = FutureProvider.autoDispose.family<List<StockLot>, String>((ref, id) {
+  final db = ref.watch(supabaseProvider);
+  return guardedPrivate(ref, () async {
+    final rows = await db.rpc('owner_product_lots', params: {'p_product_id': id});
+    return (rows as List).map((e) => StockLot.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  });
+});

@@ -41,7 +41,7 @@ class _OpeningStockScreenState extends ConsumerState<OpeningStockScreen> {
   }
 
   Future<void> _pick() async {
-    final p = await pickProduct(context);
+    final p = await pickProduct(context, allowCreate: true);
     if (p != null && mounted) setState(() => _product = p);
   }
 

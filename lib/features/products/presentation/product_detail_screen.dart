@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/common.dart';
 import '../../auth/data/auth_repository.dart';
@@ -288,6 +289,7 @@ class _OwnerCostCard extends ConsumerWidget {
           children: [
             InfoRow('Average cost', Money.format(c['average_cost'])),
             InfoRow('Stock value', Money.format(c['carrying_value']), bold: true),
+            _LotsList(productId: productId),
           ],
         ),
         loading: () => const LinearProgressIndicator(),
@@ -500,6 +502,38 @@ class _PhotosSectionState extends ConsumerState<_PhotosSection> {
           const SizedBox(height: 4),
           Text('JPEG, PNG or WebP · up to 5 MB each', style: Theme.of(context).textTheme.bodySmall),
         ],
+      ],
+    );
+  }
+}
+
+/// Stock split by purchase. The top row is sold first (FIFO).
+class _LotsList extends ConsumerWidget {
+  const _LotsList({required this.productId});
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lots = ref.watch(productLotsProvider(productId));
+    if (!lots.hasValue || lots.requireValue.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 24),
+        Text('Stock by purchase (top one sells first)',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        for (final (i, l) in lots.requireValue.indexed)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(radius: 14, child: Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+            title: Text(l.source, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('${l.receivedAt.year > 1971 ? '${BizTime.date(l.receivedAt)} · ' : ''}'
+                '${Money.format(l.unitCost)} each'),
+            trailing: Text('${l.qtyLeft} of ${l.qtyIn} left', style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
       ],
     );
   }

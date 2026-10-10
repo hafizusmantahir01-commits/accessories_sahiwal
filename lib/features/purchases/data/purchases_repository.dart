@@ -87,6 +87,21 @@ class PurchasesRepository {
         );
       });
 
+  /// Per product line of a posted purchase: received, sold, still in stock (FIFO).
+  Future<List<PurchaseStockLine>> stock(String id) => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_purchase_stock', params: {'p_purchase_id': id});
+        return (rows as List).map((e) => PurchaseStockLine.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      });
+
+  /// purchase id → (received, left) for every posted purchase.
+  Future<Map<String, (int, int)>> remaining() => guardedPrivate(_ref, () async {
+        final rows = await _db.rpc('owner_purchase_remaining');
+        return {
+          for (final r in (rows as List).map((e) => Map<String, dynamic>.from(e as Map)))
+            r['purchase_id'] as String: ((r['qty_in'] as num).toInt(), (r['qty_left'] as num).toInt()),
+        };
+      });
+
   Future<void> deleteDraft(String id) => guardedPrivate(
         _ref,
         () async => _db.rpc('owner_delete_purchase_draft', params: {'p_purchase_id': id}),
@@ -118,4 +133,29 @@ final purchaseListProvider = FutureProvider.autoDispose.family<List<PurchaseSumm
 
 final purchaseProvider = FutureProvider.autoDispose.family<Purchase, String>(
   (ref, id) => ref.watch(purchasesRepositoryProvider).get(id),
+);
+
+class PurchaseStockLine {
+  const PurchaseStockLine({required this.code, required this.name, required this.qtyIn, required this.qtyLeft, required this.qtySold});
+  final String code;
+  final String name;
+  final int qtyIn;
+  final int qtyLeft;
+  final int qtySold;
+
+  factory PurchaseStockLine.fromJson(Map<String, dynamic> j) => PurchaseStockLine(
+        code: (j['product_code'] as String?) ?? '',
+        name: (j['product_name'] as String?) ?? '',
+        qtyIn: (j['qty_in'] as num).toInt(),
+        qtyLeft: (j['qty_left'] as num).toInt(),
+        qtySold: (j['qty_sold'] as num).toInt(),
+      );
+}
+
+final purchaseStockProvider = FutureProvider.autoDispose.family<List<PurchaseStockLine>, String>(
+  (ref, id) => ref.watch(purchasesRepositoryProvider).stock(id),
+);
+
+final purchaseRemainingProvider = FutureProvider.autoDispose<Map<String, (int, int)>>(
+  (ref) => ref.watch(purchasesRepositoryProvider).remaining(),
 );

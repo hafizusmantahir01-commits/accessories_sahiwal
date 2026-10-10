@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +7,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/brand_logo.dart';
 import '../../../core/widgets/three_d.dart';
+import '../../security/data/security_repository.dart';
 import '../data/auth_repository.dart';
 
 /// Accounts are created by the owner — there is no sign-up.
@@ -40,6 +43,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authRepositoryProvider).signIn(email: _email.text, password: _password.text);
       // Router redirects automatically once the session and profile load.
     } catch (e) {
+      // Owner gets an alert about failed attempts (who tried, which device).
+      unawaited(ref.read(securityRepositoryProvider).reportLoginFailure(_email.text));
       if (mounted) setState(() => _error = AppException.from(e).message);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -96,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                                        const Center(child: Spin3D(angle: 0.3, child: Monogram(text: 'AS', size: 150))),
+                    const Center(child: Spin3D(angle: 0.3, child: Monogram(text: 'AS', size: 150))),
                     const SizedBox(height: 22),
                     Row(
                       children: [

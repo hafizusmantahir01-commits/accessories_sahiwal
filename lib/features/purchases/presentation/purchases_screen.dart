@@ -38,8 +38,13 @@ class _PurchaseList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final purchases = ref.watch(purchaseListProvider(drafts));
+    final remaining = drafts ? null : ref.watch(purchaseRemainingProvider);
+    final left = remaining != null && remaining.hasValue ? remaining.requireValue : const <String, (int, int)>{};
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(purchaseListProvider(drafts).future),
+      onRefresh: () {
+        ref.invalidate(purchaseRemainingProvider);
+        return ref.refresh(purchaseListProvider(drafts).future);
+      },
       child: AsyncView<List<PurchaseSummary>>(
         value: purchases,
         onRetry: () => ref.invalidate(purchaseListProvider(drafts)),
@@ -68,7 +73,20 @@ class _PurchaseList extends ConsumerWidget {
                     if (p.supplierRef.isNotEmpty) 'Bill ${p.supplierRef}',
                     if (!p.isDraft) p.paymentMethod.label,
                   ].join(' · ')),
-                  trailing: Text(Money.format(p.total), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(Money.format(p.total), style: const TextStyle(fontWeight: FontWeight.w600)),
+                      if (left[p.id] case (final inQty, final leftQty))
+                        Text(leftQty == 0 ? 'All sold' : '$leftQty of $inQty left',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: leftQty == 0 ? Colors.grey : Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            )),
+                    ],
+                  ),
                 ),
               );
             },

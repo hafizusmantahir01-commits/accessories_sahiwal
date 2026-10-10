@@ -27,6 +27,9 @@ import '../features/sales/domain/sale.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sale_detail_screen.dart';
 import '../features/sales/presentation/sales_screen.dart';
+import '../features/security/data/security_repository.dart';
+import '../features/security/presentation/device_gate_screen.dart';
+import '../features/security/presentation/devices_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/stock/presentation/stock_screen.dart';
 import '../features/suppliers/presentation/suppliers_screen.dart';
@@ -51,6 +54,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen(currentProfileProvider, (_, _) => refresh.ping());
   ref.listen(currentUserIdProvider, (_, _) => refresh.ping());
   ref.listen(privateAreaProvider.select((s) => s.unlocked), (_, _) => refresh.ping());
+  ref.listen(deviceStatusProvider, (_, _) => refresh.ping());
   ref.onDispose(refresh.dispose);
 
   String? redirect(BuildContext context, GoRouterState state) {
@@ -68,9 +72,21 @@ final routerProvider = Provider<GoRouter>((ref) {
     if (profileAsync.hasError || profile == null || !profile.isActive) {
       return loc == '/blocked' ? null : '/blocked';
     }
-    if (loc == '/login' || loc == '/splash' || loc == '/blocked') return '/';
+    // New or blocked device: stop here until the owner approves it.
+    final device = ref.read(deviceStatusProvider);
+    if (device.isLoading && !device.hasValue) {
+      return loc == '/splash' ? null : '/splash';
+    }
+    final deviceStatus = device.hasValue ? device.requireValue : 'approved';
+    if (deviceStatus == 'pending' || deviceStatus == 'blocked') {
+      return loc == '/device' ? null : '/device';
+    }
+    if (loc == '/login' || loc == '/splash' || loc == '/blocked' || loc == '/device') return '/';
     if (_ownerOnly(loc) && !profile.isOwner) return '/';
-    if ((loc.startsWith('/private/users') || loc.startsWith('/private/security')) && !profile.isRealOwner) return '/private';
+    if ((loc.startsWith('/private/users') || loc.startsWith('/private/security') || loc.startsWith('/private/devices')) &&
+        !profile.isRealOwner) {
+      return '/private';
+    }
 
     final unlocked = ref.read(privateAreaProvider).unlocked;
     if (loc.startsWith('/private') && loc != '/private/unlock' && !unlocked) {
@@ -87,6 +103,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
       GoRoute(path: '/blocked', builder: (_, _) => const BlockedScreen()),
+      GoRoute(path: '/device', builder: (_, _) => const DeviceGateScreen()),
       // Customer display mode: no navigation, no private data.
       GoRoute(path: '/display', builder: (_, s) => CustomerDisplayScreen(
             showPrices: s.uri.queryParameters['prices'] != '0',
@@ -157,6 +174,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(path: 'users', builder: (_, _) => const UsersScreen()),
               GoRoute(path: 'history', builder: (_, _) => const ActivityHistoryScreen()),
               GoRoute(path: 'security', builder: (_, _) => const PrivateSecurityScreen()),
+              GoRoute(path: 'devices', builder: (_, _) => const DevicesScreen()),
             ],
           ),
         ],

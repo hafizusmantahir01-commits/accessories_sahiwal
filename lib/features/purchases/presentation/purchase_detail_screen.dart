@@ -77,6 +77,10 @@ class PurchaseDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  if (!p.isDraft) ...[
+                    const SizedBox(height: 12),
+                    _PurchaseStockCard(purchaseId: p.id),
+                  ],
                   if (p.isDraft) ...[
                     const SizedBox(height: 16),
                     Wrap(
@@ -132,6 +136,45 @@ class PurchaseDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// How much of this purchase is sold and how much is still in stock.
+/// Sales always use the oldest purchase first.
+class _PurchaseStockCard extends ConsumerWidget {
+  const _PurchaseStockCard({required this.purchaseId});
+  final String purchaseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stock = ref.watch(purchaseStockProvider(purchaseId));
+    return SectionCard(
+      title: 'Stock from this purchase',
+      child: stock.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (e, _) => ErrorView(error: e, onRetry: () => ref.invalidate(purchaseStockProvider(purchaseId))),
+        data: (lines) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final l in lines)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('${l.name} · ${l.code}'),
+                subtitle: LinearProgressIndicator(
+                  value: l.qtyIn == 0 ? 0 : l.qtySold / l.qtyIn,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                trailing: Text('${l.qtyLeft} left / ${l.qtyIn}\n${l.qtySold} sold',
+                    textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            const SizedBox(height: 6),
+            Text('Sales always take from the oldest purchase first.',
+                style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),

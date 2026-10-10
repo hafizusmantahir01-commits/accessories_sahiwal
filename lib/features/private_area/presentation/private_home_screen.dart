@@ -20,6 +20,7 @@ class PrivateHomeScreen extends ConsumerWidget {
       (Icons.account_balance_wallet_outlined, 'Stock valuation', 'Average cost and stock value', '/private/valuation'),
       (Icons.history, 'Activity history', 'Who added, edited, sold or deleted what', '/private/history'),
       if (realOwner) ...[
+        (Icons.shield_outlined, 'Devices & security', 'Approve or block phones/computers, login alerts', '/private/devices'),
         (Icons.group_outlined, 'Users & permissions', 'Partner accounts and access', '/private/users'),
         (Icons.key_outlined, 'Private password', 'Change the locked-area password', '/private/security'),
       ],
