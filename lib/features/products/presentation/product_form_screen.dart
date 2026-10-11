@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/money.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/widgets/common.dart';
 import '../../settings/data/settings_repository.dart';
 import '../data/products_repository.dart';
@@ -268,7 +269,22 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                                   _field(_variant, 'Variant (colour / capacity)'),
                                 ]),
                                 const SizedBox(height: 12),
-                                _field(_barcode, 'Barcode (optional)'),
+                                Row(
+                                  children: [
+                                    Expanded(child: _field(_barcode, 'Barcode (optional)')),
+                                    IconButton(
+                                      tooltip: 'Scan with camera',
+                                      icon: const Icon(Icons.photo_camera_outlined),
+                                      onPressed: () async {
+                                        final code = await scanBarcode(context);
+                                        if (code != null && mounted) {
+                                          setState(() => _barcode.text = code);
+                                          _markDirty();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),

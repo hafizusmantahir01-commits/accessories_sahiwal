@@ -35,7 +35,8 @@ begin
 end $$;
 
 -- Month by month: bills, pieces, sales, cost, profit.
-create or replace function public.owner_profit_by_month(p_from date, p_to date)
+drop function if exists public.owner_profit_by_month(date, date);
+create function public.owner_profit_by_month(p_from date, p_to date)
 returns table (month date, bills bigint, pieces bigint, net_sales numeric, cogs numeric, profit numeric)
 language plpgsql stable security definer set search_path = '' as $$
 begin

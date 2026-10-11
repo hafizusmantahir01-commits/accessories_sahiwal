@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../../app/theme.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/three_d.dart';
 import '../../auth/data/auth_repository.dart';
@@ -489,6 +490,15 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(tooltip: 'Search by name', onPressed: _pick, icon: const Icon(Icons.search)),
+              const SizedBox(width: 4),
+              IconButton.filledTonal(
+                tooltip: 'Scan with camera',
+                icon: const Icon(Icons.photo_camera_outlined),
+                onPressed: () async {
+                  final code = await scanBarcode(context);
+                  if (code != null && mounted) await _addByCode(code);
+                },
+              ),
             ],
           ),
           const SizedBox(height: 12),

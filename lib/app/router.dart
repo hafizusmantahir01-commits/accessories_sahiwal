@@ -8,7 +8,9 @@ import '../features/auth/presentation/account_screen.dart';
 import '../features/auth/presentation/blocked_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/splash_screen.dart';
+import '../features/customers/presentation/customers_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/expenses/presentation/expenses_screen.dart';
 import '../features/gallery/presentation/customer_display_screen.dart';
 import '../features/history/presentation/activity_history_screen.dart';
 import '../features/gallery/presentation/gallery_screen.dart';
@@ -23,9 +25,15 @@ import '../features/products/presentation/products_screen.dart';
 import '../features/purchases/presentation/purchase_detail_screen.dart';
 import '../features/purchases/presentation/purchase_editor_screen.dart';
 import '../features/purchases/presentation/purchases_screen.dart';
+import '../features/reports/presentation/bulk_price_screen.dart';
+import '../features/reports/presentation/day_closing_screen.dart';
+import '../features/reports/presentation/dead_stock_screen.dart';
+import '../features/reports/presentation/export_screen.dart';
+import '../features/reports/presentation/reorder_screen.dart';
 import '../features/sales/domain/sale.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sale_detail_screen.dart';
+import '../features/sales/presentation/sale_return_screen.dart';
 import '../features/sales/presentation/sales_screen.dart';
 import '../features/security/data/security_repository.dart';
 import '../features/security/presentation/device_gate_screen.dart';
@@ -47,7 +55,9 @@ bool _ownerOnly(String loc) =>
     loc.startsWith('/private') ||
     loc.startsWith('/settings') ||
     loc == '/products/new' ||
-    loc.endsWith('/edit');
+    loc == '/products/bulk-price' ||
+    loc.endsWith('/edit') ||
+    loc.endsWith('/return');
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefresh();
@@ -118,6 +128,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, s) => ProductsScreen(initialQuery: s.uri.queryParameters['q']),
             routes: [
               GoRoute(path: 'new', builder: (_, _) => const ProductFormScreen()),
+              GoRoute(path: 'bulk-price', builder: (_, _) => const BulkPriceScreen()),
               GoRoute(
                 path: ':id',
                 builder: (_, s) => ProductDetailScreen(productId: s.pathParameters['id']!),
@@ -135,11 +146,25 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'new',
                 builder: (_, s) => NewSaleScreen(initialType: SaleType.parse(s.uri.queryParameters['type'])),
               ),
-              GoRoute(path: ':id', builder: (_, s) => SaleDetailScreen(saleId: s.pathParameters['id']!)),
+              GoRoute(
+                path: ':id',
+                builder: (_, s) => SaleDetailScreen(saleId: s.pathParameters['id']!),
+                routes: [
+                  GoRoute(path: 'return', builder: (_, s) => SaleReturnScreen(saleId: s.pathParameters['id']!)),
+                ],
+              ),
             ],
           ),
           GoRoute(path: '/stock', builder: (_, s) => StockScreen(lowOnly: s.uri.queryParameters['low'] == '1')),
           GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
+          GoRoute(path: '/closing', builder: (_, _) => const DayClosingScreen()),
+          GoRoute(
+            path: '/customers',
+            builder: (_, _) => const CustomersScreen(),
+            routes: [
+              GoRoute(path: ':id', builder: (_, s) => CustomerDetailScreen(customerId: s.pathParameters['id']!)),
+            ],
+          ),
           GoRoute(path: '/more', builder: (_, _) => const MoreScreen()),
           GoRoute(path: '/account', builder: (_, _) => const AccountScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
@@ -157,7 +182,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'new',
-                    builder: (_, s) => PurchaseEditorScreen(productId: s.uri.queryParameters['product']),
+                    builder: (_, s) => PurchaseEditorScreen(productIds: [
+                      ...?s.uri.queryParameters['product']?.split(','),
+                      ...?s.uri.queryParameters['products']?.split(','),
+                    ].where((e) => e.isNotEmpty).toList()),
                   ),
                   GoRoute(
                     path: ':id',
@@ -172,6 +200,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ],
               ),
               GoRoute(path: 'suppliers', builder: (_, _) => const SuppliersScreen()),
+              GoRoute(path: 'expenses', builder: (_, _) => const ExpensesScreen()),
+              GoRoute(path: 'reorder', builder: (_, _) => const ReorderScreen()),
+              GoRoute(path: 'dead-stock', builder: (_, _) => const DeadStockScreen()),
+              GoRoute(path: 'export', builder: (_, _) => const ExportScreen()),
               GoRoute(path: 'opening-stock', builder: (_, _) => const OpeningStockScreen()),
               GoRoute(path: 'valuation', builder: (_, _) => const StockValuationScreen()),
               GoRoute(path: 'users', builder: (_, _) => const UsersScreen()),

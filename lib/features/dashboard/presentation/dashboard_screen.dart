@@ -13,6 +13,7 @@ import '../../sales/data/sales_repository.dart';
 import '../../stock/data/stock_repository.dart';
 import '../../valuation/data/valuation_repository.dart';
 import '../../private_area/presentation/stock_locked.dart';
+import '../../reports/presentation/trend_card.dart';
 
 /// Role-specific summary. Partners see quantities only; the owner sees stock
 /// value only while the private area is unlocked (fetched from the server then).
@@ -108,6 +109,10 @@ class DashboardScreen extends ConsumerWidget {
                   if (isOwner) ...[
                     const SizedBox(height: 16),
                     if (unlocked) const _OwnerValueCard() else const _LockedOwnerCard(),
+                    if (unlocked) ...[
+                      const SizedBox(height: 16),
+                      const TrendCard(),
+                    ],
                   ],
                   const SizedBox(height: 16),
                   SectionCard(
@@ -121,6 +126,8 @@ class DashboardScreen extends ConsumerWidget {
                               onPressed: () => context.push('/sales/new?type=wholesale')),
                           ActionChip(avatar: const Icon(Icons.point_of_sale), label: const Text('Retail sale'),
                               onPressed: () => context.push('/sales/new?type=retail')),
+                          ActionChip(avatar: const Icon(Icons.lock_clock), label: const Text('Day closing'),
+                              onPressed: () => context.push('/closing')),
                         ],
                         ActionChip(avatar: const Icon(Icons.search), label: const Text('Find product'),
                             onPressed: () => context.go('/products')),
@@ -133,6 +140,8 @@ class DashboardScreen extends ConsumerWidget {
                               onPressed: () => context.push('/products/new')),
                           ActionChip(avatar: const Icon(Icons.shopping_cart_outlined), label: const Text('New purchase'),
                               onPressed: () => context.go('/private/purchases/new')),
+                          ActionChip(avatar: const Icon(Icons.playlist_add_check), label: const Text('What to order'),
+                              onPressed: () => context.go('/private/reorder')),
                         ],
                       ],
                     ),

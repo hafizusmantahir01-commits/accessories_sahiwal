@@ -45,6 +45,29 @@ class MoreScreen extends ConsumerWidget {
               onTap: () => context.go('/settings'),
             ),
           ],
+          if (isOwner || (profile?.canCreateSale ?? false))
+            ListTile(
+              leading: const Icon(Icons.lock_clock),
+              title: const Text('Day closing (galla)'),
+              subtitle: const Text('Count the cash at the end of the day'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/closing'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.storefront_outlined),
+            title: const Text('Shopkeepers (khata)'),
+            subtitle: const Text('Bills, products and rates of every shop'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.go('/customers'),
+          ),
+          if (isOwner)
+            ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text('Expenses'),
+              subtitle: const Text('Rent, bills, salary - for real net profit'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/private/expenses'),
+            ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
             title: const Text('Gallery'),

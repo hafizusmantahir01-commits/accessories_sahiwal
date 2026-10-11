@@ -11,6 +11,7 @@ import '../../../core/widgets/common.dart';
 import '../../../core/widgets/correction_dialogs.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../private_area/data/private_area_controller.dart';
+import '../../stock/presentation/adjust_stock_dialog.dart';
 import '../../stock/presentation/stock_history_sheet.dart';
 import '../data/products_repository.dart';
 import '../domain/product.dart';
@@ -247,10 +248,21 @@ class _InfoSection extends ConsumerWidget {
         ),
         if (isOwner && ref.watch(stockVisibleProvider)) ...[
           const SizedBox(height: 8),
-          FilledButton.tonalIcon(
-            onPressed: () => context.push('/private/purchases/new?product=${p.id}'),
-            icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Add new stock (new purchase)'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: () => context.push('/private/purchases/new?product=${p.id}'),
+                icon: const Icon(Icons.add_shopping_cart),
+                label: const Text('Add new stock (new purchase)'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showAdjustStockDialog(context, ref, p),
+                icon: const Icon(Icons.tune),
+                label: const Text('Fix stock (broken / lost / count)'),
+              ),
+            ],
           ),
         ],
         const SizedBox(height: 12),

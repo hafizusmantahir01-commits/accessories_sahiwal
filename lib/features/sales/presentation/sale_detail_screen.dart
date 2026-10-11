@@ -14,6 +14,8 @@ import '../../private_area/data/private_area_controller.dart';
 import '../../settings/data/settings_repository.dart';
 import '../data/sales_repository.dart';
 import '../domain/sale.dart';
+import 'bill_pdf.dart';
+import 'sale_return_screen.dart';
 
 /// Receipt view of one sale. Owner (unlocked) also sees cost/profit and can void.
 class SaleDetailScreen extends ConsumerWidget {
@@ -79,6 +81,8 @@ class SaleDetailScreen extends ConsumerWidget {
       ref.invalidate(salesListProvider);
       ref.invalidate(salesSummaryProvider);
       ref.invalidate(ownerProfitProvider);
+      ref.invalidate(profitByMonthProvider);
+      ref.invalidate(profitByProductProvider);
       if (context.mounted) context.showSuccess('${s.invoiceNo} voided — stock returned.');
     } catch (e) {
       if (context.mounted) context.showError(e);
@@ -99,14 +103,41 @@ class SaleDetailScreen extends ConsumerWidget {
         title: const Text('Sale receipt'),
         actions: [
           if (sale.hasValue) ...[
-            IconButton(
-              tooltip: 'Copy receipt (WhatsApp)',
-              icon: const Icon(Icons.copy_all_outlined),
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: _receiptText(sale.requireValue, b)));
-                if (context.mounted) context.showSuccess('Receipt copied — paste it in WhatsApp.');
+            PopupMenuButton<String>(
+              tooltip: 'Share / print bill',
+              icon: const Icon(Icons.ios_share),
+              onSelected: (v) async {
+                final r = ref.read(saleReturnsProvider(saleId));
+                final returns = r.hasValue ? r.requireValue : const <SaleReturn>[];
+                try {
+                  switch (v) {
+                    case 'pdf':
+                      await shareBillPdf(sale.requireValue, b, returns: returns);
+                    case 'print':
+                      await printBillPdf(sale.requireValue, b, returns: returns);
+                    default:
+                      await Clipboard.setData(ClipboardData(text: _receiptText(sale.requireValue, b)));
+                      if (context.mounted) context.showSuccess('Receipt copied — paste it in WhatsApp.');
+                  }
+                } catch (e) {
+                  if (context.mounted) context.showError(e);
+                }
               },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('PDF bill (WhatsApp)')),
+                ),
+                PopupMenuItem(value: 'print', child: ListTile(leading: Icon(Icons.print_outlined), title: Text('Print'))),
+                PopupMenuItem(value: 'copy', child: ListTile(leading: Icon(Icons.copy_all_outlined), title: Text('Copy as text'))),
+              ],
             ),
+            if (isOwner && !sale.requireValue.isVoided)
+              IconButton(
+                tooltip: 'Return items',
+                icon: const Icon(Icons.assignment_return_outlined),
+                onPressed: () => context.push('/sales/$saleId/return'),
+              ),
             if (isOwner && unlocked && !sale.requireValue.isVoided)
               IconButton(
                 tooltip: 'Void sale',
@@ -205,6 +236,15 @@ class SaleDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  _ReturnsCard(sale: s, businessName: b.businessName),
+                  if (isOwner && !s.isVoided) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/sales/${s.id}/return'),
+                      icon: const Icon(Icons.assignment_return_outlined),
+                      label: const Text('Return items (customer brought back)'),
+                    ),
+                  ],
                   if (isOwner) ...[
                     const SizedBox(height: 16),
                     if (unlocked)
@@ -253,6 +293,56 @@ class _SaleProfitCard extends ConsumerWidget {
             InfoRow('Margin', '${margin.toStringAsFixed(1)}%'),
           ]);
         },
+      ),
+    );
+  }
+}
+
+/// Returns already made on this bill, each with a copyable slip.
+class _ReturnsCard extends ConsumerWidget {
+  const _ReturnsCard({required this.sale, required this.businessName});
+  final Sale sale;
+  final String businessName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final returns = ref.watch(saleReturnsProvider(sale.id));
+    if (!returns.hasValue || returns.requireValue.isEmpty) return const SizedBox.shrink();
+    final list = returns.requireValue;
+    final total = list.fold(Money.zero, (a, r) => a + r.refund);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: SectionCard(
+        title: 'Returned items',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final r in list) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('${r.returnNo} · ${BizTime.dateTime(r.createdAt)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  IconButton(
+                    tooltip: 'Copy return slip',
+                    icon: const Icon(Icons.copy_all_outlined, size: 20),
+                    onPressed: () => copyReturnReceipt(context, sale, r, businessName),
+                  ),
+                ],
+              ),
+              for (final i in r.items)
+                Text('${i.quantity} × ${i.productName} · ${Money.format(i.refund)}${i.damaged ? ' · damaged' : ''}',
+                    style: theme.textTheme.bodySmall),
+              Text('Money back ${Money.format(r.refund)} (${r.method.label}) · ${r.reason}',
+                  style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
+              const Divider(height: 18),
+            ],
+            InfoRow('Total money back', '− ${Money.format(total)}', bold: true),
+            InfoRow('Kept by customer', Money.format(sale.total - total)),
+          ],
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/widgets/common.dart';
 import '../../products/data/products_repository.dart';
 import '../../products/presentation/widgets/product_picker.dart';
@@ -44,11 +45,12 @@ class _LineEditor {
 
 /// Draft → review → fully-paid posting. Saving a draft never changes stock.
 class PurchaseEditorScreen extends ConsumerStatefulWidget {
-  const PurchaseEditorScreen({super.key, this.purchaseId, this.productId});
+  const PurchaseEditorScreen({super.key, this.purchaseId, this.productIds = const []});
   final String? purchaseId;
 
-  /// Start a NEW purchase with this product already added ("Add new stock").
-  final String? productId;
+  /// Start a NEW purchase with these products already added
+  /// ("Add new stock" on a product, or "Make purchase" from low stock).
+  final List<String> productIds;
 
   @override
   ConsumerState<PurchaseEditorScreen> createState() => _PurchaseEditorScreenState();
@@ -76,21 +78,31 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
     _draftId = widget.purchaseId;
     if (_draftId != null) {
       _load();
-    } else if (widget.productId != null) {
-      _prefillProduct(widget.productId!);
+    } else if (widget.productIds.isNotEmpty) {
+      _prefillProducts(widget.productIds);
     }
   }
 
-  Future<void> _prefillProduct(String id) async {
-    try {
-      final p = await ref.read(productsRepositoryProvider).get(id);
-      if (!mounted) return;
-      setState(() {
-        _lines.add(_LineEditor(DraftLine(productId: p.id, productCode: p.code, productName: p.name)));
-        _dirty = true;
-      });
-    } catch (e) {
-      if (mounted) context.showError(e);
+  /// Each entry is "productId" or "productId:quantity".
+  Future<void> _prefillProducts(List<String> ids) async {
+    final repo = ref.read(productsRepositoryProvider);
+    final seen = <String>{};
+    for (final entry in ids) {
+      final parts = entry.split(':');
+      final id = parts.first.trim();
+      final qty = parts.length > 1 ? (int.tryParse(parts[1]) ?? 1) : 1;
+      if (id.isEmpty || !seen.add(id)) continue;
+      try {
+        final p = await repo.get(id);
+        if (!mounted) return;
+        setState(() {
+          _lines.add(_LineEditor(
+              DraftLine(productId: p.id, productCode: p.code, productName: p.name, quantity: qty < 1 ? 1 : qty)));
+          _dirty = true;
+        });
+      } catch (e) {
+        if (mounted) context.showError(e);
+      }
     }
   }
 
@@ -164,6 +176,31 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
       _lines.add(_LineEditor(DraftLine(productId: p.id, productCode: p.code, productName: p.name)));
     }
     _changed();
+  }
+
+  Future<void> _scanLine() async {
+    final code = await scanBarcode(context);
+    if (code == null || !mounted) return;
+    try {
+      final hit = await ref.read(productsRepositoryProvider).lookup(code);
+      if (!mounted) return;
+      if (hit == null) {
+        context.showError('No product with code $code. Use "Add" to search or create it.');
+        return;
+      }
+      final id = hit['id'] as String;
+      final existing = _lines.where((l) => l.line.productId == id).toList();
+      if (existing.isNotEmpty) {
+        final e = existing.first;
+        e.qty.text = '${(int.tryParse(e.qty.text) ?? 0) + 1}';
+        context.showSuccess('${hit['name']}: quantity increased.');
+      } else {
+        _lines.add(_LineEditor(DraftLine(productId: id, productCode: hit['code'] as String, productName: hit['name'] as String)));
+      }
+      _changed();
+    } catch (e) {
+      if (mounted) context.showError(e);
+    }
   }
 
   Future<void> _checkDuplicate() async {
@@ -450,7 +487,13 @@ class _PurchaseEditorScreenState extends ConsumerState<PurchaseEditorScreen> {
     const money = TextInputType.numberWithOptions(decimal: true);
     return SectionCard(
       title: 'Products (${_lines.length})',
-      trailing: FilledButton.tonalIcon(onPressed: _addLine, icon: const Icon(Icons.add), label: const Text('Add')),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(tooltip: 'Scan with camera', icon: const Icon(Icons.photo_camera_outlined), onPressed: _scanLine),
+          FilledButton.tonalIcon(onPressed: _addLine, icon: const Icon(Icons.add), label: const Text('Add')),
+        ],
+      ),
       child: _lines.isEmpty
           ? const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),

@@ -56,6 +56,12 @@ class ActivityEntry {
         'purchase_posted' => Icons.shopping_cart_outlined,
         'opening_stock_posted' => Icons.inventory_outlined,
         'purchase_line_edited' || 'opening_stock_edited' => Icons.edit_note,
+        'stock_adjusted' => Icons.tune,
+        'day_closed' || 'day_closing_changed' => Icons.lock_clock,
+        'bulk_price_change' => Icons.price_change_outlined,
+        'sale_returned' => Icons.assignment_return_outlined,
+        'expense_added' || 'expense_edited' || 'expense_deleted' => Icons.payments_outlined,
+        'customer_updated' => Icons.storefront_outlined,
         'purchase_line_deleted' || 'purchase_deleted' || 'opening_stock_deleted' => Icons.delete_forever_outlined,
         'category_created' || 'category_updated' || 'category_deleted' => Icons.category_outlined,
         'user_access_changed' || 'partner_created' || 'sessions_revoked' ||
@@ -82,6 +88,16 @@ class ActivityEntry {
         'sale_voided' => 'Voided sale ${_v('invoice_no')} · ${Money.format(before['total'])}',
         'purchase_posted' => 'Purchase ${_v('purchase_no')} · ${Money.format(after['total'])}',
         'opening_stock_posted' => 'Opening stock: ${_v('quantity')} pcs @ ${Money.format(after['unit_cost'])}',
+        'stock_adjusted' =>
+          'Fixed stock: ${_v('name')} (${_v('code')}) ${(after['qty_change'] is num && (after['qty_change'] as num) > 0) ? '+' : ''}${_v('qty_change')} pcs',
+        'day_closed' => 'Closed day ${_v('closing_date')} · counted ${Money.format(after['counted_cash'])}',
+        'day_closing_changed' => 'Changed closing of ${_v('closing_date')}',
+        'bulk_price_change' => 'Changed prices of ${_v('count')} products together',
+        'sale_returned' => 'Return ${_v('return_no')} on ${_v('invoice_no')} · money back ${Money.format(after['refund'])}',
+        'expense_added' => 'Expense: ${_v('category')} · ${Money.format(after['amount'])}',
+        'expense_edited' => 'Edited expense: ${_v('category')} · ${Money.format(after['amount'])}',
+        'expense_deleted' => 'Deleted expense: ${_v('category')} · ${Money.format(before['amount'])}',
+        'customer_updated' => 'Edited shop ${_v('name')}',
         'purchase_line_edited' => 'Corrected ${_v('purchase_no')}: ${_v('name')} (${_v('code')})',
         'purchase_line_deleted' => 'Removed ${_v('name')} (${_v('code')}) from ${_v('purchase_no')}',
         'purchase_deleted' => 'Deleted purchase ${_v('purchase_no')} · ${Money.format(before['total'])}',
@@ -136,6 +152,40 @@ class ActivityEntry {
       if (before['total'] != null && after['total'] != null) {
         lines.add('Purchase total ${Money.format(before['total'])} → ${Money.format(after['total'])}');
       }
+    }
+    if (action == 'day_closed' || action == 'day_closing_changed') {
+      final d = Money.parse(after['difference']);
+      lines.add('Should be ${Money.format(after['expected_cash'])} · '
+          '${d.signum == 0 ? 'exact' : (d.signum < 0 ? 'SHORT ${Money.format(-d)}' : 'extra ${Money.format(d)}')}');
+    }
+    if (action == 'bulk_price_change') {
+      final v = after['value'];
+      lines.add('${_v('field')} prices ${v is num && v < 0 ? '' : '+'}$v${_v('mode') == 'percent' ? '%' : ' Rs'}');
+    }
+    if (action == 'stock_adjusted') {
+      lines.add('Stock now ${after['qty_after']} · value ${Money.format(after['value_change'])}');
+    }
+    if (action == 'sale_returned') {
+      if (_v('customer').isNotEmpty) lines.add('Customer: ${_v('customer')}');
+      for (final i in (after['items'] as List? ?? const [])) {
+        final m = Map<String, dynamic>.from(i as Map);
+        lines.add('${m['quantity']} × ${m['name']} · ${Money.format(m['refund'])}'
+            '${m['condition'] == 'damaged' ? ' (damaged)' : ''}');
+      }
+    }
+    if (action == 'expense_edited') {
+      lines.add('${Money.format(before['amount'])} → ${Money.format(after['amount'])}'
+          '${before['date'] != after['date'] ? ' · date ${before['date']} → ${after['date']}' : ''}');
+    }
+    if (action == 'expense_added' || action == 'expense_deleted') {
+      final note = (after['note'] ?? before['note'] ?? '').toString();
+      final date = (after['date'] ?? before['date'] ?? '').toString();
+      lines.add([date, if (note.isNotEmpty) note].join(' · '));
+    }
+    if (action == 'customer_updated') {
+      if (before['name'] != after['name']) lines.add('Name: ${before['name']} → ${after['name']}');
+      if (before['phone'] != after['phone']) lines.add('Phone: ${before['phone']} → ${after['phone']}');
+      if (before['address'] != after['address']) lines.add('Address: ${before['address']} → ${after['address']}');
     }
     if (action == 'purchase_line_deleted') {
       lines.add('${before['quantity']} × ${Money.format(before['unit_price'])} removed');

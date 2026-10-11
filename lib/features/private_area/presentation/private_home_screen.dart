@@ -15,6 +15,11 @@ class PrivateHomeScreen extends ConsumerWidget {
     final realOwner = ref.watch(profileOrNullProvider)?.isRealOwner ?? false;
     final items = <(IconData, String, String, String)>[
       (Icons.shopping_cart_outlined, 'Purchases', 'Record fully-paid supplier purchases', '/private/purchases'),
+      (Icons.payments_outlined, 'Expenses', 'Rent, bills, salary - taken out of profit', '/private/expenses'),
+      (Icons.playlist_add_check, 'What to order', 'Suggested quantities from selling speed', '/private/reorder'),
+      (Icons.hourglass_bottom, 'Not selling (dead stock)', 'Items stuck on the shelf and their value', '/private/dead-stock'),
+      (Icons.lock_clock, 'Day closing (galla)', 'Count cash; see short / extra by day', '/closing'),
+      (Icons.table_view_outlined, 'Excel backup', 'Download sales, stock, profit as Excel', '/private/export'),
       (Icons.local_shipping_outlined, 'Suppliers', 'Names and contact details', '/private/suppliers'),
       (Icons.inventory_outlined, 'Opening stock', 'Existing inventory with actual unit cost', '/private/opening-stock'),
       (Icons.account_balance_wallet_outlined, 'Stock valuation', 'Average cost and stock value', '/private/valuation'),

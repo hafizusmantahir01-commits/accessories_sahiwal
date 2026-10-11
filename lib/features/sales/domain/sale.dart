@@ -36,6 +36,8 @@ class Customer {
 
 class SaleLine {
   const SaleLine({
+    this.id = '',
+    this.productId = '',
     required this.lineNo,
     required this.productCode,
     required this.productName,
@@ -49,6 +51,9 @@ class SaleLine {
     required this.warrantyDays,
   });
 
+  /// sale_items.id (used for returns).
+  final String id;
+  final String productId;
   final int lineNo;
   final String productCode;
   final String productName;
@@ -65,6 +70,8 @@ class SaleLine {
       [if (warrantyDays > 0) '$warrantyDays days', if (warrantyNote.isNotEmpty) warrantyNote].join(' · ');
 
   factory SaleLine.fromJson(Map<String, dynamic> j) => SaleLine(
+        id: (j['id'] as String?) ?? '',
+        productId: (j['product_id'] as String?) ?? '',
         lineNo: (j['line_no'] as num).toInt(),
         productCode: j['product_code'] as String,
         productName: j['product_name'] as String,
@@ -83,6 +90,7 @@ class SaleLine {
 class Sale {
   const Sale({
     required this.id,
+    this.customerId,
     required this.invoiceNo,
     required this.type,
     required this.isVoided,
@@ -103,6 +111,7 @@ class Sale {
   });
 
   final String id;
+  final String? customerId;
   final String invoiceNo;
   final SaleType type;
   final bool isVoided;
@@ -130,6 +139,7 @@ class Sale {
       ..sort((a, b) => a.lineNo.compareTo(b.lineNo));
     return Sale(
       id: j['id'] as String,
+      customerId: j['customer_id'] as String?,
       invoiceNo: j['invoice_no'] as String,
       type: SaleType.parse(j['sale_type']),
       isVoided: j['status'] == 'voided',
@@ -177,9 +187,14 @@ class CartLine {
 }
 
 class SalesSummary {
-  const SalesSummary({required this.count, this.pieces = 0, required this.netSales, required this.discounts, required this.wholesale, required this.retail});
+  SalesSummary({required this.count, this.pieces = 0, required this.netSales, required this.discounts, required this.wholesale, required this.retail, Decimal? returns, this.returnsCount = 0})
+      : returns = returns ?? Decimal.zero;
   final int count;
   final int pieces;
+
+  /// Money refunded for returned items in this period.
+  final Decimal returns;
+  final int returnsCount;
   final Decimal netSales;
   final Decimal discounts;
   final Decimal wholesale;
@@ -188,6 +203,8 @@ class SalesSummary {
   factory SalesSummary.fromJson(Map<String, dynamic> j) => SalesSummary(
         count: (j['count'] as num?)?.toInt() ?? 0,
         pieces: (j['pieces'] as num?)?.toInt() ?? 0,
+        returns: Money.parse(j['returns']),
+        returnsCount: (j['returns_count'] as num?)?.toInt() ?? 0,
         netSales: Money.parse(j['net_sales']),
         discounts: Money.parse(j['discounts']),
         wholesale: Money.parse(j['wholesale']),
@@ -197,13 +214,21 @@ class SalesSummary {
 
 /// Owner report: one month of sales and profit.
 class MonthProfit {
-  const MonthProfit({required this.month, required this.bills, required this.pieces, required this.netSales, required this.cogs, required this.profit});
+  const MonthProfit({required this.month, required this.bills, required this.pieces, required this.netSales, required this.cogs, required this.profit, required this.returns, required this.stockLoss, required this.expenses, required this.netProfit});
   final DateTime month;
   final int bills;
   final int pieces;
   final Decimal netSales;
   final Decimal cogs;
+
+  /// Profit on goods (sales − returns − cost).
   final Decimal profit;
+  final Decimal returns;
+  final Decimal stockLoss;
+  final Decimal expenses;
+
+  /// Profit after stock loss and expenses.
+  final Decimal netProfit;
 
   factory MonthProfit.fromJson(Map<String, dynamic> j) => MonthProfit(
         month: DateTime.parse(j['month'] as String),
@@ -212,6 +237,10 @@ class MonthProfit {
         netSales: Money.parse(j['net_sales']),
         cogs: Money.parse(j['cogs']),
         profit: Money.parse(j['profit']),
+        returns: Money.parse(j['returns']),
+        stockLoss: Money.parse(j['stock_loss']),
+        expenses: Money.parse(j['expenses']),
+        netProfit: Money.parse(j['net_profit']),
       );
 }
 
@@ -234,5 +263,65 @@ class ProductProfit {
         netSales: Money.parse(j['net_sales']),
         cogs: Money.parse(j['cogs']),
         profit: Money.parse(j['profit']),
+      );
+}
+
+/// Items a customer brought back (part of a bill).
+class SaleReturn {
+  const SaleReturn({
+    required this.id,
+    required this.returnNo,
+    required this.refund,
+    required this.method,
+    required this.reason,
+    required this.createdAt,
+    required this.items,
+  });
+
+  final String id;
+  final String returnNo;
+  final Decimal refund;
+  final PaymentMethod method;
+  final String reason;
+  final DateTime createdAt;
+  final List<SaleReturnLine> items;
+
+  factory SaleReturn.fromJson(Map<String, dynamic> j) => SaleReturn(
+        id: j['id'] as String,
+        returnNo: j['return_no'] as String,
+        refund: Money.parse(j['refund_amount']),
+        method: PaymentMethod.parse(j['refund_method']),
+        reason: (j['reason'] as String?) ?? '',
+        createdAt: DateTime.parse(j['created_at'] as String),
+        items: (j['items'] as List? ?? const [])
+            .map((e) => SaleReturnLine.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+      );
+}
+
+class SaleReturnLine {
+  const SaleReturnLine({
+    required this.saleItemId,
+    required this.productCode,
+    required this.productName,
+    required this.quantity,
+    required this.refund,
+    required this.damaged,
+  });
+
+  final String saleItemId;
+  final String productCode;
+  final String productName;
+  final int quantity;
+  final Decimal refund;
+  final bool damaged;
+
+  factory SaleReturnLine.fromJson(Map<String, dynamic> j) => SaleReturnLine(
+        saleItemId: j['sale_item_id'] as String,
+        productCode: (j['product_code'] as String?) ?? '',
+        productName: (j['product_name'] as String?) ?? '',
+        quantity: (j['quantity'] as num).toInt(),
+        refund: Money.parse(j['refund_amount']),
+        damaged: j['condition'] == 'damaged',
       );
 }

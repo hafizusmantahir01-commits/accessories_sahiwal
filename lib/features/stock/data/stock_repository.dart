@@ -92,6 +92,28 @@ class StockRepository {
     }
   }
 
+  /// Owner: correct stock. Negative = remove (broken / lost), positive = add (found).
+  Future<Map<String, dynamic>> adjust({
+    required String productId,
+    required int qtyChange,
+    required String kind,
+    String note = '',
+    String? unitCost,
+  }) async {
+    try {
+      final res = await _db.rpc('owner_adjust_stock', params: {
+        'p_product_id': productId,
+        'p_qty_change': qtyChange,
+        'p_kind': kind,
+        'p_note': note.trim(),
+        'p_unit_cost': unitCost,
+      });
+      return Map<String, dynamic>.from(res as Map);
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
   Future<List<StockMovement>> history(String productId) async {
     try {
       final rows = await _db.rpc('stock_movement_history', params: {'p_product_id': productId, 'p_limit': 100});

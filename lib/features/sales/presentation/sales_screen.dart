@@ -183,6 +183,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                             _WhiteStat('Wholesale', Money.format(s.wholesale)),
                             _WhiteStat('Retail', Money.format(s.retail)),
                             if (s.discounts.signum > 0) _WhiteStat('Discounts given', Money.format(s.discounts)),
+                            if (s.returns.signum > 0)
+                              _WhiteStat('Returns (${s.returnsCount})', '− ${Money.format(s.returns)}'),
                           ]),
                         ],
                       ),
@@ -280,15 +282,54 @@ class _ProfitCard extends ConsumerWidget {
         error: (e, _) => ErrorView(error: e),
         data: (m) {
           final net = Money.parse(m['net_sales']);
+          final returns = Money.parse(m['returns']);
           final cogs = Money.parse(m['cogs']);
           final gp = Money.parse(m['gross_profit']);
+          final loss = Money.parse(m['stock_loss']);
+          final expenses = Money.parse(m['expenses']);
+          final np = Money.parse(m['net_profit']);
           final margin = net.signum > 0 ? (gp.toDouble() / net.toDouble() * 100) : 0.0;
-          return Column(children: [
-            InfoRow('Net sales (money received)', Money.format(net)),
-            InfoRow('Cost of goods sold', Money.format(cogs)),
-            InfoRow('Gross profit', Money.format(gp), bold: true),
-            InfoRow('Margin', '${margin.toStringAsFixed(1)}%'),
-          ]);
+          final theme = Theme.of(context);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (returns.signum > 0) ...[
+                InfoRow('Sales', Money.format(m['sales'])),
+                InfoRow('Returns (money given back)', '− ${Money.format(returns)}'),
+              ],
+              InfoRow('Net sales (money kept)', Money.format(net)),
+              InfoRow('Cost of goods sold', '− ${Money.format(cogs)}'),
+              InfoRow('Profit on goods', Money.format(gp), bold: true),
+              InfoRow('Margin', '${margin.toStringAsFixed(1)}%'),
+              const Divider(height: 20),
+              InfoRow(loss.signum < 0 ? 'Stock gain (found pieces)' : 'Stock loss (broken / lost)',
+                  loss.signum < 0 ? '+ ${Money.format(-loss)}' : '− ${Money.format(loss)}'),
+              InfoRow('Expenses (rent, bills …)', '− ${Money.format(expenses)}'),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: (np.signum < 0 ? AppTheme.danger : Colors.green.shade700).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text('NET PROFIT (asal munafa)',
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    ),
+                    Text(
+                      Money.format(np),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: np.signum < 0 ? AppTheme.danger : Colors.green.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -321,13 +362,24 @@ class _MonthsCard extends ConsumerWidget {
                   dense: true,
                   title: Text('${_names[m.month.month - 1]} ${m.month.year}',
                       style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${m.bills} bills · ${m.pieces} pcs · sales ${Money.format(m.netSales)}'),
-                  trailing: Text(
-                    Money.format(m.profit),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: m.profit.signum < 0 ? AppTheme.danger : Colors.green.shade700,
-                    ),
+                  subtitle: Text('${m.bills} bills · ${m.pieces} pcs · sales ${Money.format(m.netSales)}\n'
+                      'goods profit ${Money.format(m.profit)}'
+                      '${m.expenses.signum > 0 ? ' · expenses ${Money.format(m.expenses)}' : ''}'
+                      '${m.stockLoss.signum != 0 ? ' · stock loss ${Money.format(m.stockLoss)}' : ''}'),
+                  isThreeLine: true,
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Net', style: theme.textTheme.bodySmall),
+                      Text(
+                        Money.format(m.netProfit),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: m.netProfit.signum < 0 ? AppTheme.danger : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],

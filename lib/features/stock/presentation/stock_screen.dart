@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/widgets/common.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/stock_repository.dart';
 import '../../private_area/data/private_area_controller.dart';
 import '../../private_area/presentation/stock_locked.dart';
@@ -25,6 +26,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
   Timer? _debounce;
   String _query = '';
   late bool _lowOnly = widget.lowOnly;
+  final Set<String> _selected = {};
 
   @override
   void didUpdateWidget(StockScreen oldWidget) {
@@ -45,9 +47,33 @@ class _StockScreenState extends ConsumerState<StockScreen> {
     final q = StockQuery(search: _query, lowOnly: _lowOnly);
     final stock = ref.watch(stockListProvider(q));
     final theme = Theme.of(context);
+    final canOrder = ref.watch(isOwnerProvider) && _lowOnly;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Stock')),
+      appBar: AppBar(
+        title: const Text('Stock'),
+        actions: [
+          if (ref.watch(isOwnerProvider)) ...[
+            IconButton(
+              tooltip: 'What to order',
+              icon: const Icon(Icons.playlist_add_check),
+              onPressed: () => context.go('/private/reorder'),
+            ),
+            IconButton(
+              tooltip: 'Not selling (dead stock)',
+              icon: const Icon(Icons.hourglass_bottom),
+              onPressed: () => context.go('/private/dead-stock'),
+            ),
+          ],
+        ],
+      ),
+      floatingActionButton: canOrder && _selected.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/private/purchases/new?products=${_selected.join(',')}'),
+              icon: const Icon(Icons.add_shopping_cart),
+              label: Text('Make purchase (${_selected.length})'),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -68,8 +94,29 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                 FilterChip(
                   label: const Text('Low stock only'),
                   selected: _lowOnly,
-                  onSelected: (v) => setState(() => _lowOnly = v),
+                  onSelected: (v) => setState(() {
+                    _lowOnly = v;
+                    _selected.clear();
+                  }),
                 ),
+                if (canOrder && stock.hasValue && stock.requireValue.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      final all = stock.requireValue.map((e) => e.productId).toSet();
+                      if (_selected.length == all.length) {
+                        _selected.clear();
+                      } else {
+                        _selected
+                          ..clear()
+                          ..addAll(all);
+                      }
+                    }),
+                    child: Text(_selected.isNotEmpty && _selected.length == stock.requireValue.length
+                        ? 'Clear'
+                        : 'Select all'),
+                  ),
+                ],
                 const Spacer(),
                 if (stock.hasValue)
                   Text('${stock.requireValue.length} items', style: theme.textTheme.bodySmall),
@@ -92,7 +139,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                     ]);
                   }
                   return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, canOrder ? 96 : 24),
                     itemCount: items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (_, i) {
@@ -109,7 +156,18 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          leading: CircleAvatar(
+                          leading: canOrder
+                              ? Checkbox(
+                                  value: _selected.contains(s.productId),
+                                  onChanged: (v) => setState(() {
+                                    if (v == true) {
+                                      _selected.add(s.productId);
+                                    } else {
+                                      _selected.remove(s.productId);
+                                    }
+                                  }),
+                                )
+                              : CircleAvatar(
                             backgroundColor: color.withValues(alpha: 0.12),
                             child: Icon(
                               s.saleableQty == 0

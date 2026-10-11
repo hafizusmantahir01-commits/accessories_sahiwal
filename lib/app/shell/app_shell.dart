@@ -22,6 +22,7 @@ const _destinations = [
   _Dest('/products', 'Products', Icons.inventory_2_outlined, Icons.inventory_2),
   _Dest('/stock', 'Stock', Icons.warehouse_outlined, Icons.warehouse),
   _Dest('/gallery', 'Gallery', Icons.photo_library_outlined, Icons.photo_library),
+  _Dest('/customers', 'Shopkeepers', Icons.storefront_outlined, Icons.storefront),
   _Dest('/private', 'Private Area', Icons.lock_outline, Icons.lock, ownerOnly: true),
   _Dest('/settings', 'Settings', Icons.settings_outlined, Icons.settings, ownerOnly: true),
 ];

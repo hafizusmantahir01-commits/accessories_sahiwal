@@ -76,6 +76,12 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         actions: [
           if (isOwner)
             IconButton(
+              tooltip: 'Change prices together',
+              icon: const Icon(Icons.price_change_outlined),
+              onPressed: () => context.push('/products/bulk-price'),
+            ),
+          if (isOwner)
+            IconButton(
               tooltip: _showArchived ? 'Hide archived' : 'Show archived',
               icon: Icon(_showArchived ? Icons.archive : Icons.archive_outlined),
               onPressed: () => setState(() => _showArchived = !_showArchived),

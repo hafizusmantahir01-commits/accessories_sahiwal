@@ -140,6 +140,50 @@ class SalesRepository {
         return Map<String, dynamic>.from(res as Map);
       });
 
+  /// Returns already made against one bill (oldest first).
+  Future<List<SaleReturn>> returnsForSale(String saleId) => _wrap(() async {
+        final rows = await _db
+            .from('sale_returns')
+            .select('*, items:sale_return_items(*)')
+            .eq('sale_id', saleId)
+            .order('created_at', ascending: true);
+        return rows.map(SaleReturn.fromJson).toList();
+      });
+
+  /// Customer brings items back. [items]: sale_item_id → (quantity, damaged).
+  Future<Map<String, dynamic>> createReturn({
+    required String saleId,
+    required Map<String, (int, bool)> items,
+    required String reason,
+    required PaymentMethod method,
+    required String idempotencyKey,
+  }) =>
+      _wrap(() async {
+        final res = await _db.rpc('owner_create_sale_return', params: {
+          'p_sale_id': saleId,
+          'p_items': [
+            for (final e in items.entries)
+              if (e.value.$1 > 0)
+                {'sale_item_id': e.key, 'quantity': e.value.$1, 'condition': e.value.$2 ? 'damaged' : 'good'},
+          ],
+          'p_reason': reason.trim(),
+          'p_refund_method': method.value,
+          'p_idempotency_key': idempotencyKey,
+        });
+        return Map<String, dynamic>.from(res as Map);
+      });
+
+  /// Bills of one customer (newest first).
+  Future<List<Sale>> listByCustomer(String customerId) => _wrap(() async {
+        final rows = await _db
+            .from('sales')
+            .select('*, items:sale_items(*)')
+            .eq('customer_id', customerId)
+            .order('completed_at', ascending: false)
+            .limit(300);
+        return rows.map(Sale.fromJson).toList();
+      });
+
   Future<DateTime?> firstSaleDate() => _wrap(() async {
         final res = await _db.rpc('sales_first_date');
         return res == null ? null : DateTime.parse(res.toString());
@@ -259,4 +303,12 @@ final saleProfitProvider = FutureProvider.autoDispose.family<Map<String, dynamic
 
 final customersProvider = FutureProvider.autoDispose<List<Customer>>(
   (ref) => ref.watch(salesRepositoryProvider).customers(),
+);
+
+final saleReturnsProvider = FutureProvider.autoDispose.family<List<SaleReturn>, String>(
+  (ref, saleId) => ref.watch(salesRepositoryProvider).returnsForSale(saleId),
+);
+
+final customerSalesProvider = FutureProvider.autoDispose.family<List<Sale>, String>(
+  (ref, customerId) => ref.watch(salesRepositoryProvider).listByCustomer(customerId),
 );
